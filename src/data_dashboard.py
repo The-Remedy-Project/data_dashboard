@@ -107,16 +107,16 @@ app.layout = html.Div([
         ),
         style={'width': '40%', 'display': 'inline-block', 'padding':'0px'}),
 
-    # html.Div(
-    #     dcc.Graph(
-    #         id='case-cts',
-    #         figure={
-    #             'layout': go.Layout(
-    #                 margin=dict(l=0, r=0, t=0, b=0),  # Tight margins
-    #             )
-    #         }
-    #     ),
-    #     style={'width': '100%', 'display': 'inline-block', 'padding':'0px'}),
+    html.Div(
+        dcc.Graph(
+            id='case-cts',
+            figure={
+                'layout': go.Layout(
+                    margin=dict(l=0, r=0, t=0, b=0),  # Tight margins
+                )
+            }
+        ),
+        style={'width': '100%', 'display': 'inline-block', 'padding':'0px'}),
 
     # html.Div(dcc.RangeSlider(
     #     cpt_df['sitdtrcv'].min(),
@@ -201,11 +201,6 @@ def update_map(filingSelections, trackingSelection):
                                                  "Rejection/Denial Rate: %{customdata[2]:.1%}<br>" +
                                                  "<extra></extra>"
                                            )
-
-    # summary_df['color_scale'] = 'Reds'
-    # summary_df[summary_df[trackingSelection].isin(regional_office_codes)]['color_scale'] = 'Blues'
-    # summary_df[summary_df[trackingSelection].isin([central_office_code])]['color_scale'] = 'Greens'
-    # print(summary_df['color_scale'])
 
     # Split the data based on category
     region_mask = summary_df[trackingSelection].isin(regional_office_codes)
@@ -350,7 +345,7 @@ def update_map(filingSelections, trackingSelection):
 def update_pie(hoverData,clickData,filingSelections,trackingSelection):
     info = clickData if clickData else hoverData #hoverData if hoverData else clickData
 
-    pie_mask = cpt_df['ITERLVL'].isin(filingSelections)
+    filter_mask = cpt_df['ITERLVL'].isin(filingSelections)
     
     # dff = cpt_df[cpt_df['ITERLVL'].isin(filingSelections)]
     if info is None:
@@ -358,10 +353,10 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection):
         inst_name = 'All Institutions'
     else:
         inst_code = info['points'][0]['customdata'][3]
-        pie_mask = pie_mask & (cpt_df[trackingSelection] == inst_code)
+        filter_mask = filter_mask & (cpt_df[trackingSelection] == inst_code)
         # dff = dff[dff[trackingSelection] == inst_code]
         inst_name = name_key_df[name_key_df['facility_code']==inst_code]['nice_name'].values[0]
-    dff = cpt_df[pie_mask]
+    dff = cpt_df[filter_mask]
     counts_df = dff['CDSTATUS'].value_counts()
     counts_df = counts_df.drop('ACC', errors='ignore')
     counts_df = counts_df.reindex(['REJ', 'CLG','CLD', 'CLO',])
@@ -400,6 +395,53 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection):
     #     )
     # )
                     
+    return fig
+
+@app.callback(
+    Output('case-cts', 'figure'),
+    Input('institution-map', 'hoverData'),
+    Input('institution-map', 'clickData'),
+    Input('filing-level', 'value'),
+    Input('tracking-level', 'value'),
+)
+def update_case_counts(hoverData, clickData, filingSelections, trackingSelection):
+    info = clickData if clickData else hoverData  # hoverData if hoverData else clickData
+
+    filter_mask = cpt_df['ITERLVL'].isin(filingSelections)
+
+    if info is None:
+        inst_name = 'All Institutions'
+    else:
+        inst_code = info['points'][0]['customdata'][3]
+        filter_mask = filter_mask & (cpt_df[trackingSelection] == inst_code)
+        inst_name = name_key_df[name_key_df['facility_code'] == inst_code]['nice_name'].values[0]
+    dff = cpt_df[filter_mask]
+
+    case_counts_df = dff.set_index('sitdtrcv').resample('W').size().reset_index(name='case_count')
+    case_counts_df['monthly_rolling_avg'] = case_counts_df['case_count'].rolling(window=4).mean()
+    case_counts_df['monthly_rolling_sum'] = case_counts_df['case_count'].rolling(window=4, min_periods=1).sum()
+
+
+    fig = go.Figure()
+
+    # Add the actual event counts to the plot
+    # fig.add_trace(go.Scatter(x=case_counts_df['sitdtrcv'], y=case_counts_df['case_count'],
+    #                          mode='lines', name='Filing Count', line=dict(color=color_map_pie.get('Rejected'))))
+
+    # Add the rolling average line to the plot
+    fig.add_trace(go.Scatter(x=case_counts_df['sitdtrcv'], y=case_counts_df['monthly_rolling_sum'],
+                             mode='lines', name='2-Month Rolling Average',
+                             line=dict(color=color_map_pie.get('Denied'), width=2)))
+
+    fig.update_layout(
+        title=f"Rolling Monthly Administrative Remedy Filings<br>({(inst_name)})",
+        # xaxis_title="Time",
+        # yaxis_title="Weekly Filing Count",
+        xaxis = dict(
+            rangeslider = {'visible': True},
+        ),
+    )
+
     return fig
     
 if __name__ == "__main__":
