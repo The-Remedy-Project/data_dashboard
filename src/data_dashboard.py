@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from datetime import datetime
 import matplotlib.pyplot as plt
 
 import re
@@ -7,19 +8,33 @@ import json
 
 import plotly.express as px
 import plotly.graph_objects as go
-from dash import Dash, html, dash_table, dcc, Input, Output, State, callback
+from dash import Dash, html, dash_table, dcc, Input, Output, State, \
+    callback, callback_context
 
 regional_office_codes = ['MXR', 'NCR', 'NER', 'SCR', 'SER', 'WXR']
 central_office_code = 'BOP'
 
+default_timerange = ['2000-01-01', '2024-06-01'] #datetime.today().strftime('%Y-%m-%d')]
+
 # load the complaint filings data into a pandas DataFrame
 cpt_df = pd.read_parquet('https://drive.google.com/uc?export=download&id=1ST06IlcakkLsR-KNoXtop1ut9QbAiDdC')
-categorical_colnames = ['ITERLVL', 'CDFCLEVN', 'CDFCLRCV', 'CDOFCRCV', 'CDSTATUS', 'STATRSN1', 'STATRSN2', 'STATRSN3', 'STATRSN4']
+categorical_colnames = [
+    'ITERLVL', 'CDFCLEVN', 'CDFCLRCV', 'CDOFCRCV', 'CDSTATUS',
+    'STATRSN1', 'STATRSN2', 'STATRSN3', 'STATRSN4', 'full_subj_code',
+]
+cpt_df['full_subj_code'] = cpt_df['CDSUB1PR']+cpt_df['CDSUB1SC']
 cpt_df[categorical_colnames] = cpt_df[categorical_colnames].astype('string')
 cpt_df[categorical_colnames] = cpt_df[categorical_colnames].astype('category')
 cpt_df[['sdtdue', 'sdtstat', 'sitdtrcv']] = cpt_df[['sdtdue', 'sdtstat', 'sitdtrcv']].apply(pd.to_datetime, format='%Y-%m-%d', errors='coerce',)
 
+
 name_key_df = pd.read_csv('../data/facility-info.csv',)
+
+subj_codes_df = pd.read_csv('https://drive.google.com/uc?export=download&id=1OQ8xLLF3hG3Dtd9C_LJpvngfsH3YO-5B')
+
+subj_code_opts = [{'label':row['secondary_desc'], 'value':row['code']} for i, row in subj_codes_df.iterrows()]
+subj_code_opts = sorted(subj_code_opts, key=lambda x: x['label'])
+# subj_code_opts = [{'label': 'SELECT ALL', 'value': 'all'}] + subj_code_opts
 
 status_dict = {'CLD': 'Denied', 
                'CLO': 'Closed (Other)', 
@@ -27,8 +42,10 @@ status_dict = {'CLD': 'Denied',
                'ACC':'Accepted', 
                'REJ':'Rejected'}
 
+trp_color = '#1e374f'
+
 color_map_pie = {
-    'Rejected':'#1e374f',
+    'Rejected':trp_color,
     'Denied':'#DD6E42',
     'Closed (Other)':'#9882AC',
     'Granted':'#FFDEC2'
@@ -39,74 +56,192 @@ external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 app = Dash(__name__, external_stylesheets=external_stylesheets)
 
 app.layout = html.Div([
+    html.Div([
         html.Div([
-            'Choose filing level:',
-            dcc.Checklist(
-                id='filing-level',
-                options=[
-                    {
-                        'label': 'Facility (BP9)', 
-                        'value': 'F'
-                    },
-                    {
-                        'label': 'Region (BP10)', 
-                        'value': 'R'
-                    },
-                    {
-                        'label': 'Agency (BP11)', 
-                        'value': 'A'
-                    },
-                ],
-                value=['F', 'R', 'A'],
-                inline=True,
-            ),
-            dcc.Store(data=['F'], id='filing-store')
-        ],
-        style={'width': '50%', 'display': 'inline-block', 'vertical-align':'top'}),
+            html.Div([
+                html.Span('Choose filing level:',
+                          style={'fontWeight': 'bold', 'margin-right': '20px'}),
+                dcc.Checklist(
+                    id='filing-level',
+                    options=[
+                        {
+                            'label': 'Facility (BP9)',
+                            'value': 'F'
+                        },
+                        {
+                            'label': 'Region (BP10)',
+                            'value': 'R'
+                        },
+                        {
+                            'label': 'Agency (BP11)',
+                            'value': 'A'
+                        },
+                    ],
+                    value=['F', 'R', 'A'],
+                    inline=True,
+                ),
+                dcc.Store(data=['F'], id='filing-store')
+            ],
+            style={'width': '100%', 'margin-bottom': '40px'}),
 
+            html.Div([
+                html.Span('Track cases by:',
+                          style={'fontWeight': 'bold', 'margin-right': '20px'}),
+                dcc.Dropdown(
+                    id='tracking-level',
+                    options=[
+                        {
+                            'label': 'Institution of Origin',
+                            'value': 'CDFCLRCV'
+                        },
+                        {
+                            'label': 'Office Responsible for Outcome',
+                            'value': 'CDOFCRCV'
+                        },
+                    ],
+                    clearable=False,
+                    value='CDOFCRCV' #'CDFCLRCV',#'CDOFCRCV',
+                ),
+            ],
+            style={'width': '100%'}),
+        ], style={'width': '50%', 'display': 'inline-block', 'vertical-align': 'top', 'padding-right': '20px'}),
+        # html.Div(
+        #     [
+        #         'Filter by case subject:',
+        #         dcc.Dropdown(
+        #             id="type-dropdown",
+        #             optionHeight=55,
+        #             options=subj_code_opts,
+        #             value=['all'],
+        #             multi=True,
+        #         ),
+        #     ],
+        #     style={'width': '33%', 'display': 'inline-block', 'vertical-align':'top'},
+        # ),
         html.Div([
-            'Track cases by:',
-            dcc.Dropdown(
-                id='tracking-level',
-                options=[
-                    {
-                        'label': 'Institution of Origin', 
-                        'value': 'CDFCLRCV'
+            # html.Div([
+            #     html.Span('Filter cases by subject:', style={'fontWeight': 'bold', 'margin-right': '20px'}),
+            #     html.Button('Select All', id='all-button-genre', className='all-button' ),
+            #     html.Button('Select None', id='none-button-genre', className='none-button'),
+            # ],
+            #     className="multi-filter",
+            #     style={'width': '100%', 'display': 'flex', 'align-items': 'center', 'margin-bottom': '10px'},
+            # ),
+            html.Div([
+                # Left-aligned text
+                html.Span('Filter cases by subject:',
+                          style={'fontWeight': 'bold', 'margin-right': '20px'}),  # Label
+
+                # Buttons pushed to the right
+                html.Div([
+                    html.Button('Select All', id='all-button-subj', className='all-button',
+                                style={'margin-right': '10px', 'padding': '0 10px', 'height': '25px',
+                                       'font-size':'12px','line-height':'8px', 'vertical-align':'middle'}),
+                    html.Button('Select None', id='none-button-subj', className='none-button',
+                                style={'padding': '0 10px', 'height': '25px',
+                                       'font-size':'12px','line-height':'8px', 'vertical-align':'middle'}),
+                ], style={'display': 'flex'}),  # Inline-flex for the buttons
+            ], style={
+                'display': 'flex',
+                'justify-content': 'space-between',  # Push the buttons to the right
+                'align-items': 'bottom',  # Vertically align both the text and buttons
+                'margin-bottom': '10px'
+            }),
+
+            html.Div([
+                dash_table.DataTable(
+                    id='datatable-subj-filter',
+                    columns=[
+                        {"name": '', "id": 'label'}
+                    ],
+                    data=subj_code_opts, #table that I defined at start
+                    fixed_rows={'headers': False},
+                    filter_action='native',
+                    row_selectable="multi",
+                    selected_rows=list(range(len(subj_code_opts))), # not needed done below instead
+                    virtualization=False,
+                    page_action='none',
+                    style_table={
+                        'minHeight': '120px',
+                        'maxHeight': '120px',
+                        'overflowY': 'auto',
                     },
-                    {
-                        'label': 'Office Responsible for Outcome', 
-                        'value': 'CDOFCRCV'
+                    css=[
+                        {
+                            'selector': '.dash-cell div.dash-cell-value',
+                            'rule': 'display: inline; white-space: inherit; overflow: inherit; text-overflow: inherit;',
+                        },
+                        {
+                            'selector': 'tr:first-child',
+                            'rule':'''
+                                    display: None;
+                            '''
+                        },
+                    ],
+                    filter_options={
+                        'case': 'insensitive',
+                        'placeholder_text': 'Search for specific case subjects...',
                     },
-                ],
-                clearable=False,
-                value='CDOFCRCV' #'CDFCLRCV',#'CDOFCRCV',
+                    style_header={
+                        'backgroundColor': trp_color,
+                        'color': 'white',
+                        'fontSize': '14px',
+                        'fontWeight': 'bold',
+                        'textAlign': 'center',
+                    },
+                    style_cell={
+                        'whiteSpace': 'no-wrap',
+                        'overflow': 'hidden',
+                        'textOverflow': 'ellipsis',
+                        'maxWidth': 0,
+                        'textAlign': 'left',
+                    },
+                    style_data_conditional=[
+                        {
+                            'if': {'row_index': 'odd'},
+                            'backgroundColor': 'rgb(232, 232, 232)'
+                        }
+                    ],
+                    style_as_list_view=True,
+                ),
+                # html.Div(id='datatable-interactivity-container')
+            ],
             ),
         ],
-        style={'width': '50%', 'display': 'inline-block', 'vertical-align':'top'}),
-       
-     
+        className='individual-filter',
+        style={'width': '50%', 'display': 'inline-block', 'vertical-align':'top'},
+        ),
+    ], style={'display': 'flex', 'width': '100%'}),
+
+    html.Div([
+        html.Hr(
+            style={'width': '100%', 'padding':'0px',},
+        )
+    ], style={'width': '100%', 'padding':'0px',}),
     # html.Div([
     #     dcc.Graph(id='institution-map')
     # ], style={'width': '75%', 'display': 'inline-block'}),
-    html.Div(
-        html.Div([
-            dcc.Graph(id='institution-map', clear_on_unhover=True)
-        ]),
-        id='graph-container', 
-        style={'width': '60%', 'display': 'inline-block',  'padding':'0px'}
-    ),
-    
-    html.Div(
-        dcc.Graph(
-            id='institution-pie',
-            figure={
-                'layout': go.Layout(
-                    margin=dict(l=10, r=10, t=10, b=10),  # Tight margins
-                )
-            }
+    html.Div([
+        html.Div(
+            html.Div([
+                dcc.Graph(id='institution-map', clear_on_unhover=True)
+            ]),
+            id='graph-container',
+            style={'width': '50%', 'display': 'inline-block',  'padding':'0px',}
         ),
-        style={'width': '40%', 'display': 'inline-block', 'padding':'0px'}),
 
+        html.Div(
+            dcc.Graph(
+                id='institution-pie',
+                figure={
+                    'layout': go.Layout(
+                        margin=dict(l=10, r=10, t=10, b=10),  # Tight margins
+                    )
+                }
+            ),
+            style={'width': '50%', 'display': 'inline-block', 'padding':'0px'}),
+        ], style={'height':'300px'},
+    ),
     html.Div(
         dcc.Graph(
             id='case-cts',
@@ -126,10 +261,56 @@ app.layout = html.Div([
     #     value=df['Year'].max(),
     #     marks={str(year): str(year) for year in df['Year'].unique()}
     # ), style={'width': '49%', 'padding': '0px 20px 20px 20px'})
-
-    dcc.Store(id='filtered-data'),
-    dcc.Store(id='intermediate-value'),
+    dcc.Store(id='time_range', data=default_timerange),
 ])
+
+@app.callback(
+    output = Output('time_range', 'data'),
+    inputs = [
+        Input('case-cts', 'relayoutData'),
+    ],
+    state = [
+        State('time_range', 'data'),
+    ],
+)
+def update_time_range(casects_relayout, time_range):
+    if casects_relayout:
+        time_range = casects_relayout.get(
+            'xaxis.range',
+            [
+                casects_relayout.get('xaxis.range[0]', default_timerange[0]),
+                casects_relayout.get('xaxis.range[1]', default_timerange[1])
+            ]
+        )
+
+    return time_range
+
+@app.callback(
+    [
+        Output('datatable-subj-filter', "selected_rows"),
+    ],
+    [
+        Input('all-button-subj', 'n_clicks'),
+        Input('none-button-subj', 'n_clicks'),
+    ],
+    [
+        State('datatable-subj-filter', "data"), #"derived_virtual_data"),
+    ]
+)
+def select_all_subj(all_clicks, none_clicks, selected_rows):
+    if selected_rows is None:
+        return [[]]
+    ctx = callback_context
+    if not ctx.triggered:
+        button_id = 'No clicks yet'
+        return [list(range(len(subj_code_opts)))]
+    else:
+        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+
+    if button_id == 'all-button-subj':
+        return [[i for i in range(len(selected_rows))]]
+    else:
+        return [[]]
 
 @app.callback(
     Output('institution-map', 'clickData'),
@@ -156,11 +337,25 @@ def update_checklist(value, active):
 
 @app.callback(
     Output('institution-map', 'figure'),
-    Input('filing-level', 'value'), 
-    Input('tracking-level', 'value'),
+    inputs = [
+        Input('filing-level', 'value'),
+        Input('tracking-level', 'value'),
+        Input('datatable-subj-filter', "selected_rows"),
+        Input('time_range', 'data'),
+    ],
+    state = [
+        State('datatable-subj-filter', "data"),
+    ],
 )
-def update_map(filingSelections, trackingSelection):
-    dff = cpt_df[cpt_df['ITERLVL'].isin(filingSelections)].copy(deep=True)
+def update_map(filingSelections, trackingSelection, selected_subj_rows, time_range, subj_rows):
+    selected_subj_code_list = [subj_rows[i]['value'] for i in selected_subj_rows]
+    time_start_str = datetime.strptime(time_range[0].split(' ')[0], '%Y-%m-%d').strftime('%m/%Y')
+    time_end_str = datetime.strptime(time_range[1].split(' ')[0], '%Y-%m-%d').strftime('%m/%Y')
+    filter_mask = cpt_df['ITERLVL'].isin(filingSelections)
+    filter_mask &= cpt_df['full_subj_code'].isin(selected_subj_code_list)
+    filter_mask &= (cpt_df['sitdtrcv'] > time_range[0]) & (cpt_df['sitdtrcv'] < time_range[1])
+
+    dff = cpt_df[filter_mask].copy(deep=True)
     
     dff['rejected_cases'] = (dff['CDSTATUS'] == 'REJ').astype(int)
     dff['denied_cases'] = (dff['CDSTATUS'] == 'CLD').astype(int)
@@ -193,11 +388,11 @@ def update_map(filingSelections, trackingSelection):
     summary_df['hover_template'] = np.where(summary_df['pop_total'].notnull(), 
                                             "<b>%{hovertext}</b><br>" + 
                                                  "2024 Population: %{customdata[0]:,}<br>" +
-                                                 "Total cases (2000-2024): %{customdata[1]:,}<br>" +
+                                                 f"Total cases ({time_start_str}-{time_end_str}): " + "%{customdata[1]:,}<br>" +
                                                  "Rejection/Denial Rate: %{customdata[2]:.1%}<br>" +
                                                  "<extra></extra>", 
                                             "<b>%{hovertext}</b><br>" + 
-                                                 "Total cases (2000-2024): %{customdata[1]:,}<br>" +
+                                                 f"Total cases ({time_start_str}-{time_end_str}): " + "%{customdata[1]:,}<br>" +
                                                  "Rejection/Denial Rate: %{customdata[2]:.1%}<br>" +
                                                  "<extra></extra>"
                                            )
@@ -210,7 +405,7 @@ def update_map(filingSelections, trackingSelection):
     dff_A = summary_df[central_mask]
 
     sizemax = 20
-    casetotalmax = 35000 #np.max(dff_F['total_closed_cases']))
+    casetotalmax = len(dff)/50 #np.max(summary_df['total_closed_cases'])/10
 
     # Create the mapbox figure with multiple traces
     fig = go.Figure()
@@ -282,7 +477,7 @@ def update_map(filingSelections, trackingSelection):
         map_style="basic",
         map_zoom=2.7,
         map_center={"lat": 38, "lon": -95},
-        margin={"r":0,"t":0,"l":0,"b":0}
+        margin={"r":0,"t":0,"l":0,"b":0},
     )
 
     
@@ -329,7 +524,8 @@ def update_map(filingSelections, trackingSelection):
             xanchor="left",
             x=0.01,
             bgcolor='rgba(0,0,0,0)',
-        )
+        ),
+        height=300,
     )
     
     return fig
@@ -337,15 +533,30 @@ def update_map(filingSelections, trackingSelection):
 
 @app.callback(
     Output('institution-pie', 'figure'),
-    Input('institution-map', 'hoverData'),
-    Input('institution-map', 'clickData'),
-    Input('filing-level', 'value'),
-    Input('tracking-level', 'value'),
+    inputs = [
+        Input('institution-map', 'hoverData'),
+        Input('institution-map', 'clickData'),
+        Input('filing-level', 'value'),
+        Input('tracking-level', 'value'),
+        Input('datatable-subj-filter', "selected_rows"),
+        Input('time_range', 'data'),
+    ],
+    state = [
+        State('datatable-subj-filter', "data"),
+    ],
 )
-def update_pie(hoverData,clickData,filingSelections,trackingSelection):
+def update_pie(hoverData,clickData,filingSelections,trackingSelection,selected_subj_rows, time_range, subj_rows):
+    # if casects_relayout:
+    #     time_range = casects_relayout.get('xaxis.range', default_timerange)
+    # else:
+    #     time_range = default_timerange
+
     info = clickData if clickData else hoverData #hoverData if hoverData else clickData
+    selected_subj_code_list = [subj_rows[i]['value'] for i in selected_subj_rows]
 
     filter_mask = cpt_df['ITERLVL'].isin(filingSelections)
+    filter_mask &= cpt_df['full_subj_code'].isin(selected_subj_code_list)
+    filter_mask &= (cpt_df['sitdtrcv'] > time_range[0]) & (cpt_df['sitdtrcv'] < time_range[1])
     
     # dff = cpt_df[cpt_df['ITERLVL'].isin(filingSelections)]
     if info is None:
@@ -353,7 +564,7 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection):
         inst_name = 'All Institutions'
     else:
         inst_code = info['points'][0]['customdata'][3]
-        filter_mask = filter_mask & (cpt_df[trackingSelection] == inst_code)
+        filter_mask &= (cpt_df[trackingSelection] == inst_code)
         # dff = dff[dff[trackingSelection] == inst_code]
         inst_name = name_key_df[name_key_df['facility_code']==inst_code]['nice_name'].values[0]
     dff = cpt_df[filter_mask]
@@ -384,7 +595,9 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection):
                       textfont_size=18, pull=[0,0.3,0,0], sort=False, rotation=270,
                       marker=dict(colors=colors, line=dict(color='#000000', width=1)))
     fig.update_layout(
-        title=f'Administrative Remedy Outcomes<br>({inst_name})'
+        title=f'Administrative Remedy Outcomes<br>({inst_name})',
+        margin={"r": 0, "t": 0, "l": 0, "b": 0},
+        height=300,
     )
     # fig.update_layout(
     #     legend=dict(
@@ -399,21 +612,30 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection):
 
 @app.callback(
     Output('case-cts', 'figure'),
-    Input('institution-map', 'hoverData'),
-    Input('institution-map', 'clickData'),
-    Input('filing-level', 'value'),
-    Input('tracking-level', 'value'),
+    inputs = [
+        Input('institution-map', 'hoverData'),
+        Input('institution-map', 'clickData'),
+        Input('filing-level', 'value'),
+        Input('tracking-level', 'value'),
+        Input('datatable-subj-filter', "selected_rows"),
+    ],
+    state = [
+        State('datatable-subj-filter', "data"),
+        State('time_range', 'data'),
+    ],
 )
-def update_case_counts(hoverData, clickData, filingSelections, trackingSelection):
+def update_case_counts(hoverData, clickData, filingSelections, trackingSelection,selected_subj_rows, subj_rows, time_range):
     info = clickData if clickData else hoverData  # hoverData if hoverData else clickData
+    selected_subj_code_list = [subj_rows[i]['value'] for i in selected_subj_rows]
 
     filter_mask = cpt_df['ITERLVL'].isin(filingSelections)
+    filter_mask &= cpt_df['full_subj_code'].isin(selected_subj_code_list)
 
     if info is None:
         inst_name = 'All Institutions'
     else:
         inst_code = info['points'][0]['customdata'][3]
-        filter_mask = filter_mask & (cpt_df[trackingSelection] == inst_code)
+        filter_mask &= (cpt_df[trackingSelection] == inst_code)
         inst_name = name_key_df[name_key_df['facility_code'] == inst_code]['nice_name'].values[0]
     dff = cpt_df[filter_mask]
 
@@ -431,15 +653,19 @@ def update_case_counts(hoverData, clickData, filingSelections, trackingSelection
     # Add the rolling average line to the plot
     fig.add_trace(go.Scatter(x=case_counts_df['sitdtrcv'], y=case_counts_df['monthly_rolling_sum'],
                              mode='lines', name='2-Month Rolling Average',
-                             line=dict(color=color_map_pie.get('Denied'), width=2)))
+                             line=dict(color=trp_color, width=2)))
 
     fig.update_layout(
-        title=f"Rolling Monthly Administrative Remedy Filings<br>({(inst_name)})",
+        title=f"Rolling Monthly Administrative Remedy Filings ({(inst_name)})",
         # xaxis_title="Time",
         # yaxis_title="Weekly Filing Count",
         xaxis = dict(
             rangeslider = {'visible': True},
+            range = time_range if time_range!=default_timerange else None, # keep time_range permanently to keep everything 2000-2024
+            autorange = False if time_range!=default_timerange else True, # keep false permanently to keep everything 2000-2024
         ),
+        margin={"t": 40, "b": 0},
+        height=250,
     )
 
     return fig
