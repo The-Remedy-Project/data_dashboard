@@ -16,17 +16,57 @@ central_office_code = 'BOP'
 
 default_timerange = ['2000-01-01', '2024-06-01'] #datetime.today().strftime('%Y-%m-%d')]
 
-# load the complaint filings data into a pandas DataFrame
-cpt_df = pd.read_parquet('https://drive.google.com/uc?export=download&id=1ST06IlcakkLsR-KNoXtop1ut9QbAiDdC')
-categorical_colnames = [
-    'ITERLVL', 'CDFCLEVN', 'CDFCLRCV', 'CDOFCRCV', 'CDSTATUS',
-    'STATRSN1', 'STATRSN2', 'STATRSN3', 'STATRSN4', 'full_subj_code',
-]
-cpt_df['full_subj_code'] = cpt_df['CDSUB1PR']+cpt_df['CDSUB1SC']
-cpt_df[categorical_colnames] = cpt_df[categorical_colnames].astype('string')
-cpt_df[categorical_colnames] = cpt_df[categorical_colnames].astype('category')
-cpt_df[['sdtdue', 'sdtstat', 'sitdtrcv']] = cpt_df[['sdtdue', 'sdtstat', 'sitdtrcv']].apply(pd.to_datetime, format='%Y-%m-%d', errors='coerce',)
+complaint_data_dtype_dict = {
+    "CASENBR": "int32",
+    "ITERLVL": "category",
+    "CDFCLEVN": "category",
+    "CDFCLRCV": "category",
+    "CDOFCRCV": "category",
+    "CDSTATUS": "category",
+    "STATRSN1": "category",
+    "STATRSN2": "category",
+    "STATRSN3": "category",
+    "STATRSN4": "category",
+    "STATRSN5": "category",
+    "CDSUB1PR": "category",
+    "CDSUB1SC": "category",
+    "sdtdue": "datetime64[ns]",
+    "sdtstat": "datetime64[ns]",
+    "sitdtrcv": "datetime64[ns]",
+    "accept": "boolean",
+    "reject": "boolean",
+    "deny": "boolean",
+    "grant": "boolean",
+    "other": "boolean",
+    "submit": "boolean",
+    "filed": "boolean",
+    "diffreg_filed": "boolean",
+    "diffinst": "boolean",
+    "closed": "boolean",
+    "comptime": "Int16",
+    "timely": "boolean",
+    "diffreg_answer": "boolean",
+    "overdue": "boolean",
+    "untimely": "boolean",
+    "resubmit": "boolean",
+    "noinfres": "boolean",
+    "attachmt": "boolean",
+    "wronglvl": "boolean",
+    "otherrej": "boolean",
+    "cdsub1cb": "category",
+}
 
+# load the complaint filings data into a pandas DataFrame
+cpt_df = pd.read_parquet('../data/complaint-filings-optimized.parquet')
+# cpt_df = pd.read_parquet('https://drive.google.com/uc?export=download&id=1ST06IlcakkLsR-KNoXtop1ut9QbAiDdC',)
+# _parquet_kwargs = {"engine": "pyarrow",
+#                    "compression": "brotli",
+#                    "index": False}
+# cpt_df.astype(complaint_data_dtype_dict).to_parquet('../data/complaint-filings-optimized.parquet', **_parquet_kwargs)
+# read_mem = cpt_df.memory_usage().sum() / 1024 ** 2
+# print(read_mem)
+
+# cpt_df[['sdtdue', 'sdtstat', 'sitdtrcv']] = cpt_df[['sdtdue', 'sdtstat', 'sitdtrcv']].apply(pd.to_datetime, format='%Y-%m-%d', errors='coerce',)
 
 name_key_df = pd.read_csv('../data/facility-info.csv',)
 
@@ -354,7 +394,7 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
     time_start_str = datetime.strptime(time_range[0].split(' ')[0], '%Y-%m-%d').strftime('%m/%Y')
     time_end_str = datetime.strptime(time_range[1].split(' ')[0], '%Y-%m-%d').strftime('%m/%Y')
     filter_mask = cpt_df['ITERLVL'].isin(filingSelections)
-    filter_mask &= cpt_df['full_subj_code'].isin(selected_subj_code_list)
+    filter_mask &= cpt_df['cdsub1cb'].isin(selected_subj_code_list)
     filter_mask &= (cpt_df['sitdtrcv'] > time_range[0]) & (cpt_df['sitdtrcv'] < time_range[1])
 
     dff = cpt_df[filter_mask].copy(deep=True)
@@ -557,7 +597,7 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection,selected_s
     selected_subj_code_list = [subj_rows[i]['value'] for i in selected_subj_rows]
 
     filter_mask = cpt_df['ITERLVL'].isin(filingSelections)
-    filter_mask &= cpt_df['full_subj_code'].isin(selected_subj_code_list)
+    filter_mask &= cpt_df['cdsub1cb'].isin(selected_subj_code_list)
     filter_mask &= (cpt_df['sitdtrcv'] > time_range[0]) & (cpt_df['sitdtrcv'] < time_range[1])
     
     # dff = cpt_df[cpt_df['ITERLVL'].isin(filingSelections)]
@@ -631,7 +671,7 @@ def update_case_counts(hoverData, clickData, filingSelections, trackingSelection
     selected_subj_code_list = [subj_rows[i]['value'] for i in selected_subj_rows]
 
     filter_mask = cpt_df['ITERLVL'].isin(filingSelections)
-    filter_mask &= cpt_df['full_subj_code'].isin(selected_subj_code_list)
+    filter_mask &= cpt_df['cdsub1cb'].isin(selected_subj_code_list)
 
     if info is None:
         inst_name = 'All Institutions'
