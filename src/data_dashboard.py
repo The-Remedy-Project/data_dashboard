@@ -1,6 +1,9 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime
+import os, time
+import random
+
 # import matplotlib.pyplot as plt
 
 # import re
@@ -8,8 +11,15 @@ from datetime import datetime
 
 # import plotly.express as px
 import plotly.graph_objects as go
-from dash import Dash, html, dash_table, dcc, Input, Output, State, \
-    callback, callback_context
+# from dash import Dash, html, dash_table, dcc, Input, Output, State, \
+#     callback, callback_context
+from dash import dash_table
+from dash_extensions.enrich import DashProxy, Output, Input, State, Serverside, html, dcc, \
+    ServersideOutputTransform, callback_context, callback
+
+rel_path2fsbackend = './file_system_backend'
+
+session_key = random.randint(100000,999999)
 
 regional_office_codes = ['MXR', 'NCR', 'NER', 'SCR', 'SER', 'WXR']
 central_office_code = 'BOP'
@@ -93,7 +103,7 @@ color_map_pie = {
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
-app = Dash(__name__, external_stylesheets=external_stylesheets)
+app = DashProxy(__name__, external_stylesheets=external_stylesheets, transforms=[ServersideOutputTransform()])
 
 server = app.server
 
@@ -304,14 +314,64 @@ app.layout = html.Div([
     #     marks={str(year): str(year) for year in df['Year'].unique()}
     # ), style={'width': '49%', 'padding': '0px 20px 20px 20px'})
     dcc.Store(id='time_range', data=default_timerange),
+    dcc.Store(id='filtered_df'),
+    dcc.Store(id='institution_filtered_df'),
+    dcc.Store(id='inst_name'),
 ])
+
+@app.callback(
+    Output('filtered_df', 'data'),
+    inputs = [
+        Input('filing-level', 'value'),
+        Input('datatable-subj-filter', "selected_rows"),
+        Input('time_range', 'data'),
+        State('datatable-subj-filter', "data"),
+    ],
+)
+def filter_df(filingSelections, selected_subj_rows, time_range, subj_rows):
+    # clear out the files in the storage directory
+    current_time = time.time()
+    for fname in os.listdir(rel_path2fsbackend):
+        fcreation_time = os.path.getctime(f'{rel_path2fsbackend}/{fname}')
+        f_age_minutes = (current_time - fcreation_time) / (60) # divide by seconds per [time unit you're interested in]
+        if f_age_minutes >= 60.:
+            os.unlink(f'{rel_path2fsbackend}/{fname}')
+
+    selected_subj_code_list = [subj_rows[i]['value'] for i in selected_subj_rows]
+    filter_mask = cpt_df['ITERLVL'].isin(filingSelections) & \
+                  cpt_df['cdsub1cb'].isin(selected_subj_code_list) & \
+                  (cpt_df['sitdtrcv'] > time_range[0]) & (cpt_df['sitdtrcv'] < time_range[1])
+
+    return Serverside(cpt_df[filter_mask], key=f'filter_df_{session_key}')
+
+@app.callback(
+    output = [
+        Output('institution_filtered_df', 'data'),
+        Output('inst_name', 'data')
+    ],
+    inputs = [
+        Input('institution-map', 'hoverData'),
+        Input('institution-map', 'clickData'),
+        Input('filtered_df', 'data'),
+        Input('tracking-level', 'value'),
+    ],
+)
+def inst_filter_df(hoverData,clickData,dff,trackingSelection,):
+    info = clickData if clickData else hoverData
+
+    if info is None:
+        inst_name = 'All Institutions'
+    else:
+        inst_code = info['points'][0]['customdata'][3]
+        dff = dff[dff[trackingSelection] == inst_code]
+        inst_name = name_key_df[name_key_df['facility_code']==inst_code]['nice_name'].values[0]
+
+    return Serverside(dff, key=f'inst_filter_df_{session_key}'), inst_name
 
 @app.callback(
     output = Output('time_range', 'data'),
     inputs = [
         Input('case-cts', 'relayoutData'),
-    ],
-    state = [
         State('time_range', 'data'),
     ],
 )
@@ -334,25 +394,23 @@ def update_time_range(casects_relayout, time_range):
     [
         Input('all-button-subj', 'n_clicks'),
         Input('none-button-subj', 'n_clicks'),
-    ],
-    [
         State('datatable-subj-filter', "data"), #"derived_virtual_data"),
     ]
 )
 def select_all_subj(all_clicks, none_clicks, selected_rows):
     if selected_rows is None:
-        return [[]]
+        return []
     ctx = callback_context
     if not ctx.triggered:
         button_id = 'No clicks yet'
-        return [list(range(len(subj_code_opts)))]
+        return list(range(len(subj_code_opts)))
     else:
         button_id = ctx.triggered[0]['prop_id'].split('.')[0]
 
     if button_id == 'all-button-subj':
-        return [[i for i in range(len(selected_rows))]]
+        return [i for i in range(len(selected_rows))]
     else:
-        return [[]]
+        return []
 
 @app.callback(
     Output('institution-map', 'clickData'),
@@ -380,48 +438,24 @@ def update_checklist(value, active):
 @app.callback(
     Output('institution-map', 'figure'),
     inputs = [
-        Input('filing-level', 'value'),
+        Input('filtered_df', 'data'),
         Input('tracking-level', 'value'),
-        Input('datatable-subj-filter', "selected_rows"),
-        Input('time_range', 'data'),
-    ],
-    state = [
-        State('datatable-subj-filter', "data"),
+        State('time_range', 'data'),
     ],
 )
-def update_map(filingSelections, trackingSelection, selected_subj_rows, time_range, subj_rows):
-    selected_subj_code_list = [subj_rows[i]['value'] for i in selected_subj_rows]
+def update_map(dff, trackingSelection, time_range):
     time_start_str = datetime.strptime(time_range[0].split(' ')[0], '%Y-%m-%d').strftime('%m/%Y')
     time_end_str = datetime.strptime(time_range[1].split(' ')[0], '%Y-%m-%d').strftime('%m/%Y')
-    filter_mask = cpt_df['ITERLVL'].isin(filingSelections)
-    filter_mask &= cpt_df['cdsub1cb'].isin(selected_subj_code_list)
-    filter_mask &= (cpt_df['sitdtrcv'] > time_range[0]) & (cpt_df['sitdtrcv'] < time_range[1])
-
-    dff = cpt_df[filter_mask].copy(deep=True)
-    
-    dff['rejected_cases'] = (dff['CDSTATUS'] == 'REJ').astype(int)
-    dff['denied_cases'] = (dff['CDSTATUS'] == 'CLD').astype(int)
-    dff['granted_cases'] = (dff['CDSTATUS'] == 'CLG').astype(int)
-    dff['closed_other_cases'] = (dff['CDSTATUS'] == 'CLO').astype(int)
-    dff['accepted_cases'] = (dff['CDSTATUS'] == 'ACC').astype(int)
     
     summary_df = dff.groupby(trackingSelection, sort=False, observed=True).agg(
         total_cases=('CDSTATUS', 'size'),
-        rejected_cases=('rejected_cases', 'sum'),
-        denied_cases=('denied_cases', 'sum'),
-        granted_cases=('granted_cases', 'sum'),
-        closed_other_cases=('closed_other_cases', 'sum'),
-        accepted_cases=('accepted_cases', 'sum')
+        rejected_cases=('reject', 'sum'),
+        denied_cases=('deny', 'sum'),
+        granted_cases=('grant', 'sum'),
+        closed_other_cases=('other', 'sum'),
+        accepted_cases=('accept', 'sum')
     ).reset_index()
 
-    # summary_df = dff.groupby(trackingSelection, sort=False, observed=True).agg(
-    #     total_cases=('CDSTATUS', 'size'),
-    #     rejected_cases=('CDSTATUS', lambda x: (x == 'REJ').sum()),
-    #     denied_cases=('CDSTATUS', lambda x: (x == 'CLD').sum()),
-    #     granted_cases=('CDSTATUS', lambda x: (x== 'CLG').sum()),
-    #     closed_other_cases=('CDSTATUS', lambda x: (x== 'CLO').sum()),
-    #     accepted_cases=('CDSTATUS', lambda x: (x== 'ACC').sum()),
-    # ).reset_index()
     
     summary_df['total_closed_cases'] = summary_df['rejected_cases'] + summary_df['denied_cases'] + summary_df['granted_cases'] + summary_df['closed_other_cases']
     summary_df['no_remedy_frac'] = 1 - (summary_df['granted_cases'] / summary_df['total_closed_cases'])
@@ -569,47 +603,18 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
         ),
         height=300,
     )
-    
+
     return fig
     
 
 @app.callback(
     Output('institution-pie', 'figure'),
     inputs = [
-        Input('institution-map', 'hoverData'),
-        Input('institution-map', 'clickData'),
-        Input('filing-level', 'value'),
-        Input('tracking-level', 'value'),
-        Input('datatable-subj-filter', "selected_rows"),
-        Input('time_range', 'data'),
-    ],
-    state = [
-        State('datatable-subj-filter', "data"),
+        Input('institution_filtered_df', 'data'),
+        Input('inst_name', 'data')
     ],
 )
-def update_pie(hoverData,clickData,filingSelections,trackingSelection,selected_subj_rows, time_range, subj_rows):
-    # if casects_relayout:
-    #     time_range = casects_relayout.get('xaxis.range', default_timerange)
-    # else:
-    #     time_range = default_timerange
-
-    info = clickData if clickData else hoverData #hoverData if hoverData else clickData
-    selected_subj_code_list = [subj_rows[i]['value'] for i in selected_subj_rows]
-
-    filter_mask = cpt_df['ITERLVL'].isin(filingSelections)
-    filter_mask &= cpt_df['cdsub1cb'].isin(selected_subj_code_list)
-    filter_mask &= (cpt_df['sitdtrcv'] > time_range[0]) & (cpt_df['sitdtrcv'] < time_range[1])
-    
-    # dff = cpt_df[cpt_df['ITERLVL'].isin(filingSelections)]
-    if info is None:
-        # dff = dff
-        inst_name = 'All Institutions'
-    else:
-        inst_code = info['points'][0]['customdata'][3]
-        filter_mask &= (cpt_df[trackingSelection] == inst_code)
-        # dff = dff[dff[trackingSelection] == inst_code]
-        inst_name = name_key_df[name_key_df['facility_code']==inst_code]['nice_name'].values[0]
-    dff = cpt_df[filter_mask]
+def update_pie(dff, inst_name):
     counts_df = dff['CDSTATUS'].value_counts()
     counts_df = counts_df.drop('ACC', errors='ignore')
     counts_df = counts_df.reindex(['REJ', 'CLG','CLD', 'CLO',])
@@ -649,38 +654,18 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection,selected_s
     #         x=-0.21
     #     )
     # )
-                    
+
     return fig
 
 @app.callback(
     Output('case-cts', 'figure'),
-    inputs = [
-        Input('institution-map', 'hoverData'),
-        Input('institution-map', 'clickData'),
-        Input('filing-level', 'value'),
-        Input('tracking-level', 'value'),
-        Input('datatable-subj-filter', "selected_rows"),
-    ],
-    state = [
-        State('datatable-subj-filter', "data"),
+    inputs=[
+        Input('institution_filtered_df', 'data'),
+        Input('inst_name', 'data'),
         State('time_range', 'data'),
     ],
 )
-def update_case_counts(hoverData, clickData, filingSelections, trackingSelection,selected_subj_rows, subj_rows, time_range):
-    info = clickData if clickData else hoverData  # hoverData if hoverData else clickData
-    selected_subj_code_list = [subj_rows[i]['value'] for i in selected_subj_rows]
-
-    filter_mask = cpt_df['ITERLVL'].isin(filingSelections)
-    filter_mask &= cpt_df['cdsub1cb'].isin(selected_subj_code_list)
-
-    if info is None:
-        inst_name = 'All Institutions'
-    else:
-        inst_code = info['points'][0]['customdata'][3]
-        filter_mask &= (cpt_df[trackingSelection] == inst_code)
-        inst_name = name_key_df[name_key_df['facility_code'] == inst_code]['nice_name'].values[0]
-    dff = cpt_df[filter_mask]
-
+def update_case_counts(dff, inst_name, time_range):
     case_counts_df = dff.set_index('sitdtrcv').resample('W').size().reset_index(name='case_count')
     case_counts_df['monthly_rolling_avg'] = case_counts_df['case_count'].rolling(window=4).mean()
     case_counts_df['monthly_rolling_sum'] = case_counts_df['case_count'].rolling(window=4, min_periods=1).sum()
@@ -713,4 +698,4 @@ def update_case_counts(hoverData, clickData, filingSelections, trackingSelection
     return fig
     
 if __name__ == "__main__":
-    app.run(debug=True, port=8051)
+    app.run_server(debug=True, port=8051)
