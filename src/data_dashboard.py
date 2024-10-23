@@ -66,8 +66,11 @@ complaint_data_dtype_dict = {
     "cdsub1cb": "category",
 }
 
+used_fields = ['ITERLVL','CDFCLRCV','CDOFCRCV','CDSTATUS','sitdtrcv',
+               'accept','reject','deny','grant','other','cdsub1cb']
+
 # load the complaint filings data into a pandas DataFrame
-cpt_df = pd.read_parquet('../data/complaint-filings-optimized.parquet')
+cpt_df = pd.read_parquet('../data/complaint-filings-optimized.parquet')[used_fields]
 # cpt_df = pd.read_parquet('https://drive.google.com/uc?export=download&id=1ST06IlcakkLsR-KNoXtop1ut9QbAiDdC',)
 # _parquet_kwargs = {"engine": "pyarrow",
 #                    "compression": "brotli",
@@ -446,7 +449,7 @@ def update_checklist(value, active):
 def update_map(dff, trackingSelection, time_range):
     time_start_str = datetime.strptime(time_range[0].split(' ')[0], '%Y-%m-%d').strftime('%m/%Y')
     time_end_str = datetime.strptime(time_range[1].split(' ')[0], '%Y-%m-%d').strftime('%m/%Y')
-    
+
     summary_df = dff.groupby(trackingSelection, sort=False, observed=True).agg(
         total_cases=('CDSTATUS', 'size'),
         rejected_cases=('reject', 'sum'),
