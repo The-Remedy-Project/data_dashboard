@@ -61,7 +61,7 @@ used_fields = ['ITERLVL','CDFCLRCV','CDOFCRCV','CDSTATUS','sitdtrcv',
                'accept','reject','deny','grant','other','cdsub1cb']
 
 # load the complaint filings data into a pandas DataFrame
-cpt_df = pd.read_parquet('../data/complaint-filings-optimized.parquet')[used_fields]
+cpt_df = pd.read_parquet('../data/complaint-filings-optimized.parquet', columns=used_fields)
 gc.collect()
 # cpt_df = pd.read_parquet('https://drive.google.com/uc?export=download&id=1ST06IlcakkLsR-KNoXtop1ut9QbAiDdC',)
 # _parquet_kwargs = {"engine": "pyarrow",
