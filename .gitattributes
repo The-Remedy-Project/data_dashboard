@@ -1,3 +1,6 @@
+#Set default behaviour, in case users don't have core.autocrlf set.
+* text=auto
+
 # Explicitly declare text files we want to always be normalized and converted
 # to native line endings on checkout.
 *.py text
@@ -14,6 +17,3 @@
 *.png binary
 *.jpg binary
 *.parquet binary
-
-# Set default behaviour, in case users don't have core.autocrlf set.
-* text=auto
