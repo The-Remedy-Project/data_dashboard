@@ -400,7 +400,7 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
     filter_mask &= cpt_df['cdsub1cb'].isin(selected_subj_code_list)
     filter_mask &= (cpt_df['sitdtrcv'] > time_range[0]) & (cpt_df['sitdtrcv'] < time_range[1])
 
-    dff = cpt_df[filter_mask].copy(deep=True)
+    dff = cpt_df[filter_mask]
 
     summary_df = dff.groupby(trackingSelection, sort=False, observed=True).agg(
         total_cases=('CDSTATUS', 'size'),
@@ -410,15 +410,6 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
         closed_other_cases=('other', 'sum'),
         accepted_cases=('accept', 'sum')
     ).reset_index()
-
-    # summary_df = dff.groupby(trackingSelection, sort=False, observed=True).agg(
-    #     total_cases=('CDSTATUS', 'size'),
-    #     rejected_cases=('CDSTATUS', lambda x: (x == 'REJ').sum()),
-    #     denied_cases=('CDSTATUS', lambda x: (x == 'CLD').sum()),
-    #     granted_cases=('CDSTATUS', lambda x: (x== 'CLG').sum()),
-    #     closed_other_cases=('CDSTATUS', lambda x: (x== 'CLO').sum()),
-    #     accepted_cases=('CDSTATUS', lambda x: (x== 'ACC').sum()),
-    # ).reset_index()
     
     summary_df['total_closed_cases'] = summary_df['rejected_cases'] + summary_df['denied_cases'] + summary_df['granted_cases'] + summary_df['closed_other_cases']
     summary_df['no_remedy_frac'] = 1 - (summary_df['granted_cases'] / summary_df['total_closed_cases'])
@@ -710,4 +701,4 @@ def update_case_counts(hoverData, clickData, filingSelections, trackingSelection
     return fig
     
 if __name__ == "__main__":
-    app.run(debug=True, port=8051)
+    app.run(debug=False, port=8051)
