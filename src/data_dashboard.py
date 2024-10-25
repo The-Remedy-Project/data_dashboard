@@ -666,7 +666,8 @@ def update_case_counts(hoverData, clickData, filingSelections, trackingSelection
         filter_mask &= (cpt_df[trackingSelection] == inst_code)
         inst_name = name_key_df[name_key_df['facility_code'] == inst_code]['nice_name'].values[0]
 
-    case_counts_df = cpt_df[filter_mask].set_index('sitdtrcv').resample('W').size().reset_index(name='case_count')
+    # case_counts_df = cpt_df[filter_mask].set_index('sitdtrcv').resample('W').size().reset_index(name='case_count')
+    case_counts_df = cpt_df[filter_mask].groupby(pd.Grouper(key='sitdtrcv', freq='W')).size().reset_index(name='case_count')
     gc.collect()
     case_counts_df['monthly_rolling_avg'] = case_counts_df['case_count'].rolling(window=4).mean()
     case_counts_df['monthly_rolling_sum'] = case_counts_df['case_count'].rolling(window=4, min_periods=1).sum()
