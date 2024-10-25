@@ -434,7 +434,7 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
     dff_A = summary_df[central_mask]
 
     sizemax = 20
-    casetotalmax = len(dff)/50 #np.max(summary_df['total_closed_cases'])/10
+    casetotalmax = np.sum(filter_mask)/50 #np.max(summary_df['total_closed_cases'])/10
 
     # Create the mapbox figure with multiple traces
     fig = go.Figure()
