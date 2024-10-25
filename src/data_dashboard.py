@@ -364,7 +364,6 @@ def select_all_subj(all_clicks, none_clicks, selected_rows):
 def reset_clickData(n_clicks):
     return None
 
-
 @app.callback(
     Output('filing-level', 'value'),
     Output('filing-store', 'data'),
@@ -396,13 +395,13 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
     selected_subj_code_list = [subj_rows[i]['value'] for i in selected_subj_rows]
     time_start_str = datetime.strptime(time_range[0].split(' ')[0], '%Y-%m-%d').strftime('%m/%Y')
     time_end_str = datetime.strptime(time_range[1].split(' ')[0], '%Y-%m-%d').strftime('%m/%Y')
-    filter_mask = cpt_df['ITERLVL'].isin(filingSelections)
-    filter_mask &= cpt_df['cdsub1cb'].isin(selected_subj_code_list)
-    filter_mask &= (cpt_df['sitdtrcv'] > time_range[0]) & (cpt_df['sitdtrcv'] < time_range[1])
+    filter_mask = cpt_df['ITERLVL'].isin(filingSelections) & \
+                  cpt_df['cdsub1cb'].isin(selected_subj_code_list) & \
+                  (cpt_df['sitdtrcv'] > time_range[0]) & (cpt_df['sitdtrcv'] < time_range[1])
 
-    dff = cpt_df[filter_mask]
-
-    summary_df = dff.groupby(trackingSelection, sort=False, observed=True).agg(
+    summary_df = cpt_df[filter_mask].groupby(
+        trackingSelection, sort=False, observed=True
+    ).agg(
         total_cases=('CDSTATUS', 'size'),
         rejected_cases=('reject', 'sum'),
         denied_cases=('deny', 'sum'),
@@ -590,15 +589,12 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection,selected_s
     
     # dff = cpt_df[cpt_df['ITERLVL'].isin(filingSelections)]
     if info is None:
-        # dff = dff
         inst_name = 'All Institutions'
     else:
         inst_code = info['points'][0]['customdata'][3]
         filter_mask &= (cpt_df[trackingSelection] == inst_code)
-        # dff = dff[dff[trackingSelection] == inst_code]
         inst_name = name_key_df[name_key_df['facility_code']==inst_code]['nice_name'].values[0]
-    dff = cpt_df[filter_mask]
-    counts_df = dff['CDSTATUS'].value_counts()
+    counts_df = cpt_df[filter_mask]['CDSTATUS'].value_counts()
     counts_df = counts_df.drop('ACC', errors='ignore')
     counts_df = counts_df.reindex(['REJ', 'CLG','CLD', 'CLO',])
 
@@ -667,9 +663,8 @@ def update_case_counts(hoverData, clickData, filingSelections, trackingSelection
         inst_code = info['points'][0]['customdata'][3]
         filter_mask &= (cpt_df[trackingSelection] == inst_code)
         inst_name = name_key_df[name_key_df['facility_code'] == inst_code]['nice_name'].values[0]
-    dff = cpt_df[filter_mask]
 
-    case_counts_df = dff.set_index('sitdtrcv').resample('W').size().reset_index(name='case_count')
+    case_counts_df = cpt_df[filter_mask].set_index('sitdtrcv').resample('W').size().reset_index(name='case_count')
     case_counts_df['monthly_rolling_avg'] = case_counts_df['case_count'].rolling(window=4).mean()
     case_counts_df['monthly_rolling_sum'] = case_counts_df['case_count'].rolling(window=4, min_periods=1).sum()
 
