@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime
+import gc
 # import matplotlib.pyplot as plt
 
 # import re
@@ -61,6 +62,7 @@ used_fields = ['ITERLVL','CDFCLRCV','CDOFCRCV','CDSTATUS','sitdtrcv',
 
 # load the complaint filings data into a pandas DataFrame
 cpt_df = pd.read_parquet('../data/complaint-filings-optimized.parquet')[used_fields]
+gc.collect()
 # cpt_df = pd.read_parquet('https://drive.google.com/uc?export=download&id=1ST06IlcakkLsR-KNoXtop1ut9QbAiDdC',)
 # _parquet_kwargs = {"engine": "pyarrow",
 #                    "compression": "brotli",
@@ -409,6 +411,7 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
         closed_other_cases=('other', 'sum'),
         accepted_cases=('accept', 'sum')
     ).reset_index()
+    gc.collect()
     
     summary_df['total_closed_cases'] = summary_df['rejected_cases'] + summary_df['denied_cases'] + summary_df['granted_cases'] + summary_df['closed_other_cases']
     summary_df['no_remedy_frac'] = 1 - (summary_df['granted_cases'] / summary_df['total_closed_cases'])
@@ -594,9 +597,8 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection,selected_s
         inst_code = info['points'][0]['customdata'][3]
         filter_mask &= (cpt_df[trackingSelection] == inst_code)
         inst_name = name_key_df[name_key_df['facility_code']==inst_code]['nice_name'].values[0]
-    counts_df = cpt_df[filter_mask]['CDSTATUS'].value_counts()
-    counts_df = counts_df.drop('ACC', errors='ignore')
-    counts_df = counts_df.reindex(['REJ', 'CLG','CLD', 'CLO',])
+    counts_df = cpt_df[filter_mask]['CDSTATUS'].value_counts().drop('ACC', errors='ignore').reindex(['REJ', 'CLG','CLD', 'CLO',])
+    gc.collect()
 
     labels = [status_dict[status] for status in counts_df.index]
     
@@ -665,6 +667,7 @@ def update_case_counts(hoverData, clickData, filingSelections, trackingSelection
         inst_name = name_key_df[name_key_df['facility_code'] == inst_code]['nice_name'].values[0]
 
     case_counts_df = cpt_df[filter_mask].set_index('sitdtrcv').resample('W').size().reset_index(name='case_count')
+    gc.collect()
     case_counts_df['monthly_rolling_avg'] = case_counts_df['case_count'].rolling(window=4).mean()
     case_counts_df['monthly_rolling_sum'] = case_counts_df['case_count'].rolling(window=4, min_periods=1).sum()
 
