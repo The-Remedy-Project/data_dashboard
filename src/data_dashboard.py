@@ -408,7 +408,7 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
 
     filter_expr = (
             (pl.col('ITERLVL').is_in(filingSelections)) &
-            (pl.col('cdsub1cb').is_in(selected_subj_code_list)) &
+            (pl.col('cdsub1cb').cast(pl.String).is_in(selected_subj_code_list)) &
             (pl.col('sitdtrcv').is_between(time_start_dt, time_end_dt))
     )
 
@@ -421,6 +421,7 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
         .collect()  # Collect the count result immediately
     ).item()  # Extract the integer value from the result
 
+    print(filtered_count)
 
     summary_df = (
         cpt_df
@@ -632,7 +633,7 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection,selected_s
 
     filter_expr = (
             (pl.col('ITERLVL').is_in(filingSelections)) &
-            (pl.col('cdsub1cb').is_in(selected_subj_code_list)) &
+            (pl.col('cdsub1cb').cast(pl.String).is_in(selected_subj_code_list)) &
             (pl.col('sitdtrcv').is_between(time_start_dt, time_end_dt))
     )
     # filter_mask = cpt_df['ITERLVL'].isin(filingSelections)
@@ -719,7 +720,7 @@ def update_case_counts(hoverData, clickData, filingSelections, trackingSelection
     # filter_mask &= cpt_df['cdsub1cb'].isin(selected_subj_code_list)
     filter_expr = (
             (pl.col('ITERLVL').is_in(filingSelections)) &
-            (pl.col('cdsub1cb').is_in(selected_subj_code_list))
+            (pl.col('cdsub1cb').cast(pl.String).is_in(selected_subj_code_list))
     )
 
     if info is None:
