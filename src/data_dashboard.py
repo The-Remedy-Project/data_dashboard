@@ -1,4 +1,5 @@
 import pandas as pd
+import polars as pl
 import numpy as np
 from datetime import datetime
 import gc
@@ -61,7 +62,7 @@ used_fields = ['ITERLVL','CDFCLRCV','CDOFCRCV','CDSTATUS','sitdtrcv',
                'accept','reject','deny','grant','other','cdsub1cb']
 
 # load the complaint filings data into a pandas DataFrame
-cpt_df = pd.read_parquet('../data/complaint-filings-optimized.parquet', columns=used_fields)
+cpt_df = pl.scan_parquet('../data/complaint-filings-optimized.parquet')#, columns=used_fields)
 gc.collect()
 # cpt_df = pd.read_parquet('https://drive.google.com/uc?export=download&id=1ST06IlcakkLsR-KNoXtop1ut9QbAiDdC',)
 # _parquet_kwargs = {"engine": "pyarrow",
@@ -395,28 +396,66 @@ def update_checklist(value, active):
 )
 def update_map(filingSelections, trackingSelection, selected_subj_rows, time_range, subj_rows):
     selected_subj_code_list = [subj_rows[i]['value'] for i in selected_subj_rows]
-    time_start_str = datetime.strptime(time_range[0].split(' ')[0], '%Y-%m-%d').strftime('%m/%Y')
-    time_end_str = datetime.strptime(time_range[1].split(' ')[0], '%Y-%m-%d').strftime('%m/%Y')
-    filter_mask = cpt_df['ITERLVL'].isin(filingSelections) & \
-                  cpt_df['cdsub1cb'].isin(selected_subj_code_list) & \
-                  (cpt_df['sitdtrcv'] > time_range[0]) & (cpt_df['sitdtrcv'] < time_range[1])
+    time_start_dt = datetime.strptime(time_range[0],
+                                      '%Y-%m-%d %H:%M:%S.%f' if len(time_range[0].split(' ')) > 1 else '%Y-%m-%d')
+    time_end_dt = datetime.strptime(time_range[1],
+                                    '%Y-%m-%d %H:%M:%S.%f' if len(time_range[1].split(' ')) > 1 else '%Y-%m-%d')
+    time_start_str = time_start_dt.strftime('%m/%Y')
+    time_end_str = time_end_dt.strftime('%m/%Y')
+    # filter_mask = cpt_df['ITERLVL'].isin(filingSelections) & \
+    #               cpt_df['cdsub1cb'].isin(selected_subj_code_list) & \
+    #               (cpt_df['sitdtrcv'] > time_range[0]) & (cpt_df['sitdtrcv'] < time_range[1])
 
-    summary_df = cpt_df[filter_mask].groupby(
-        trackingSelection, sort=False, observed=True
-    ).agg(
-        total_cases=('CDSTATUS', 'size'),
-        rejected_cases=('reject', 'sum'),
-        denied_cases=('deny', 'sum'),
-        granted_cases=('grant', 'sum'),
-        closed_other_cases=('other', 'sum'),
-        accepted_cases=('accept', 'sum')
-    ).reset_index()
-    gc.collect()
-    
+    filter_expr = (
+            (pl.col('ITERLVL').is_in(filingSelections)) &
+            (pl.col('cdsub1cb').is_in(selected_subj_code_list)) &
+            (pl.col('sitdtrcv').is_between(time_start_dt, time_end_dt))
+    )
+
+    filtered_count = (
+        cpt_df
+        .filter(
+            filter_expr
+        )
+        .select(pl.len())  # Count rows after filter
+        .collect()  # Collect the count result immediately
+    ).item()  # Extract the integer value from the result
+
+
+    summary_df = (
+        cpt_df
+        .filter(
+            filter_expr
+        )
+        .group_by(trackingSelection)
+        .agg([
+            pl.col('CDSTATUS').len().alias('total_cases'),
+            pl.col('reject').sum().alias('rejected_cases'),
+            pl.col('deny').sum().alias('denied_cases'),
+            pl.col('grant').sum().alias('granted_cases'),
+            pl.col('other').sum().alias('closed_other_cases'),
+            pl.col('accept').sum().alias('accepted_cases')
+        ])
+    )
+
+    summary_df = summary_df.collect().to_pandas()
+    # summary_df = cpt_df[filter_mask].groupby(
+    #     trackingSelection, sort=False, observed=True
+    # ).agg(
+    #     total_cases=('CDSTATUS', 'size'),
+    #     rejected_cases=('reject', 'sum'),
+    #     denied_cases=('deny', 'sum'),
+    #     granted_cases=('grant', 'sum'),
+    #     closed_other_cases=('other', 'sum'),
+    #     accepted_cases=('accept', 'sum')
+    # ).reset_index()
     summary_df['total_closed_cases'] = summary_df['rejected_cases'] + summary_df['denied_cases'] + summary_df['granted_cases'] + summary_df['closed_other_cases']
     summary_df['no_remedy_frac'] = 1 - (summary_df['granted_cases'] / summary_df['total_closed_cases'])
     summary_df = pd.merge(summary_df, name_key_df, left_on=trackingSelection, right_on='facility_code')
     summary_df = summary_df[summary_df['latitude'].notnull()]
+
+    gc.collect()
+
     summary_df['hover_template'] = np.where(summary_df['pop_total'].notnull(), 
                                             "<b>%{hovertext}</b><br>" + 
                                                  "2024 Population: %{customdata[0]:,}<br>" +
@@ -437,7 +476,7 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
     dff_A = summary_df[central_mask]
 
     sizemax = 20
-    casetotalmax = np.sum(filter_mask)/50 #np.max(summary_df['total_closed_cases'])/10
+    casetotalmax = filtered_count/50 #np.sum(filter_mask)/50 #np.max(summary_df['total_closed_cases'])/10
 
     # Create the mapbox figure with multiple traces
     fig = go.Figure()
@@ -586,18 +625,38 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection,selected_s
     info = clickData if clickData else hoverData #hoverData if hoverData else clickData
     selected_subj_code_list = [subj_rows[i]['value'] for i in selected_subj_rows]
 
-    filter_mask = cpt_df['ITERLVL'].isin(filingSelections)
-    filter_mask &= cpt_df['cdsub1cb'].isin(selected_subj_code_list)
-    filter_mask &= (cpt_df['sitdtrcv'] > time_range[0]) & (cpt_df['sitdtrcv'] < time_range[1])
+    time_start_dt = datetime.strptime(time_range[0],
+                                      '%Y-%m-%d %H:%M:%S.%f' if len(time_range[0].split(' ')) > 1 else '%Y-%m-%d')
+    time_end_dt = datetime.strptime(time_range[1],
+                                    '%Y-%m-%d %H:%M:%S.%f' if len(time_range[1].split(' ')) > 1 else '%Y-%m-%d')
+
+    filter_expr = (
+            (pl.col('ITERLVL').is_in(filingSelections)) &
+            (pl.col('cdsub1cb').is_in(selected_subj_code_list)) &
+            (pl.col('sitdtrcv').is_between(time_start_dt, time_end_dt))
+    )
+    # filter_mask = cpt_df['ITERLVL'].isin(filingSelections)
+    # filter_mask &= cpt_df['cdsub1cb'].isin(selected_subj_code_list)
+    # filter_mask &= (cpt_df['sitdtrcv'] > time_range[0]) & (cpt_df['sitdtrcv'] < time_range[1])
     
     # dff = cpt_df[cpt_df['ITERLVL'].isin(filingSelections)]
     if info is None:
         inst_name = 'All Institutions'
     else:
         inst_code = info['points'][0]['customdata'][3]
-        filter_mask &= (cpt_df[trackingSelection] == inst_code)
+        # filter_mask &= (cpt_df[trackingSelection] == inst_code)
+        filter_expr &= (pl.col(trackingSelection) == inst_code)
         inst_name = name_key_df[name_key_df['facility_code']==inst_code]['nice_name'].values[0]
-    counts_df = cpt_df[filter_mask]['CDSTATUS'].value_counts().drop('ACC', errors='ignore').reindex(['REJ', 'CLG','CLD', 'CLO',])
+    # counts_df = cpt_df[filter_mask]['CDSTATUS'].value_counts().drop('ACC', errors='ignore').reindex(['REJ', 'CLG','CLD', 'CLO',])
+    counts_df = (
+        cpt_df
+        .filter(filter_expr)
+        .group_by('CDSTATUS')
+        .agg(pl.len().alias('values')) #.len().alias('value')
+        .filter(~pl.col('CDSTATUS').eq('ACC'))  # Exclude 'ACC' status if it exists
+    )
+    counts_df = counts_df.collect().to_pandas().set_index('CDSTATUS').reindex(['CLG','CLO','CLD','REJ'])
+
     gc.collect()
 
     labels = [status_dict[status] for status in counts_df.index]
@@ -615,12 +674,12 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection,selected_s
     #                              'Granted':'#FFE8D4'},
     #              sort=False,
     #             )
-    fig = go.Figure(data=[go.Pie(labels=[status_dict[status] for status in counts_df.index],
-                                 values=counts_df.values)])
+    fig = go.Figure(data=[go.Pie(labels=labels,
+                                 values=counts_df['values'])])
     fig.update_traces(hoverinfo='label+percent', 
                       textinfo='value', 
                       # text=[val for val in counts_df.values],
-                      textfont_size=18, pull=[0,0.3,0,0], sort=False, rotation=270,
+                      textfont_size=18, pull=[0.3,0,0,0], sort=False, rotation=270,
                       marker=dict(colors=colors, line=dict(color='#000000', width=1)))
     fig.update_layout(
         title=f'Administrative Remedy Outcomes<br>({inst_name})',
@@ -656,18 +715,33 @@ def update_case_counts(hoverData, clickData, filingSelections, trackingSelection
     info = clickData if clickData else hoverData  # hoverData if hoverData else clickData
     selected_subj_code_list = [subj_rows[i]['value'] for i in selected_subj_rows]
 
-    filter_mask = cpt_df['ITERLVL'].isin(filingSelections)
-    filter_mask &= cpt_df['cdsub1cb'].isin(selected_subj_code_list)
+    # filter_mask = cpt_df['ITERLVL'].isin(filingSelections)
+    # filter_mask &= cpt_df['cdsub1cb'].isin(selected_subj_code_list)
+    filter_expr = (
+            (pl.col('ITERLVL').is_in(filingSelections)) &
+            (pl.col('cdsub1cb').is_in(selected_subj_code_list))
+    )
 
     if info is None:
         inst_name = 'All Institutions'
     else:
         inst_code = info['points'][0]['customdata'][3]
-        filter_mask &= (cpt_df[trackingSelection] == inst_code)
+        # filter_mask &= (cpt_df[trackingSelection] == inst_code)
+        filter_expr &= (pl.col(trackingSelection) == inst_code)
         inst_name = name_key_df[name_key_df['facility_code'] == inst_code]['nice_name'].values[0]
 
     # case_counts_df = cpt_df[filter_mask].set_index('sitdtrcv').resample('W').size().reset_index(name='case_count')
-    case_counts_df = cpt_df[filter_mask].groupby(pd.Grouper(key='sitdtrcv', freq='W')).size().reset_index(name='case_count')
+    # case_counts_df = cpt_df[filter_mask].groupby(pd.Grouper(key='sitdtrcv', freq='W')).size().reset_index(name='case_count')
+    case_counts_df = (
+        cpt_df
+        .filter(filter_expr)
+        .sort('sitdtrcv')
+        .group_by_dynamic('sitdtrcv', every='1w',)  # Weekly resampling
+        .agg(pl.len().alias('case_count'))
+        .select(['sitdtrcv', 'case_count'])  # Keep only necessary columns
+    )
+    case_counts_df = case_counts_df.collect().to_pandas()
+
     gc.collect()
     case_counts_df['monthly_rolling_avg'] = case_counts_df['case_count'].rolling(window=4).mean()
     case_counts_df['monthly_rolling_sum'] = case_counts_df['case_count'].rolling(window=4, min_periods=1).sum()
