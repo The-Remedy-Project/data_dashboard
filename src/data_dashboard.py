@@ -421,8 +421,6 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
         .collect()  # Collect the count result immediately
     ).item()  # Extract the integer value from the result
 
-    print(filtered_count)
-
     summary_df = (
         cpt_df
         .filter(
@@ -741,7 +739,16 @@ def update_case_counts(hoverData, clickData, filingSelections, trackingSelection
         .agg(pl.len().alias('case_count'))
         .select(['sitdtrcv', 'case_count'])  # Keep only necessary columns
     )
-    case_counts_df = case_counts_df.collect().to_pandas()
+    # filling in gaps and convert to pandas
+    #### see: https://www.rhosignal.com/posts/filling-gaps-lazy-mode/
+    case_counts_df = (
+        case_counts_df
+        .collect()
+        .upsample('sitdtrcv', every='1w')
+        .fill_null(strategy='zero')
+        .to_pandas()
+    )
+    print(case_counts_df)
 
     gc.collect()
     case_counts_df['monthly_rolling_avg'] = case_counts_df['case_count'].rolling(window=4).mean()
