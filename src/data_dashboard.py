@@ -322,6 +322,7 @@ app.layout = html.Div([
     ],
 )
 def update_time_range(casects_relayout, time_range):
+    print(casects_relayout)
     if casects_relayout:
         time_range = casects_relayout.get(
             'xaxis.range',
@@ -547,7 +548,7 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
         map_style="basic",
         map_zoom=2.7,
         map_center={"lat": 38, "lon": -95},
-        margin={"r":0,"t":0,"l":0,"b":0},
+        margin={"t":0,"b":0,"r":0,"l":0},
     )
 
     
@@ -623,7 +624,7 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection,selected_s
 
     info = clickData if clickData else hoverData #hoverData if hoverData else clickData
     selected_subj_code_list = [subj_rows[i]['value'] for i in selected_subj_rows]
-
+    print(time_range[0])
     time_start_dt = datetime.strptime(time_range[0],
                                       '%Y-%m-%d %H:%M:%S.%f' if len(time_range[0].split(' ')) > 1 else '%Y-%m-%d')
     time_end_dt = datetime.strptime(time_range[1],
@@ -682,7 +683,7 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection,selected_s
                       marker=dict(colors=colors, line=dict(color='#000000', width=1)))
     fig.update_layout(
         title=f'Administrative Remedy Outcomes<br>({inst_name})',
-        margin={"r": 0, "t": 0, "l": 0, "b": 0},
+        margin={"t": 0, "b": 0, "l": 0, "r": 0},
         height=300,
     )
     # fig.update_layout(
@@ -735,7 +736,7 @@ def update_case_counts(hoverData, clickData, filingSelections, trackingSelection
         cpt_df
         .filter(filter_expr)
         .sort('sitdtrcv')
-        .group_by_dynamic('sitdtrcv', every='1w',)  # Weekly resampling
+        .group_by_dynamic('sitdtrcv', every='1w',start_by='datapoint')  # Weekly resampling
         .agg(pl.len().alias('case_count'))
         .select(['sitdtrcv', 'case_count'])  # Keep only necessary columns
     )
@@ -748,7 +749,6 @@ def update_case_counts(hoverData, clickData, filingSelections, trackingSelection
         .fill_null(strategy='zero')
         .to_pandas()
     )
-    print(case_counts_df)
 
     gc.collect()
     case_counts_df['monthly_rolling_avg'] = case_counts_df['case_count'].rolling(window=4).mean()
@@ -771,11 +771,12 @@ def update_case_counts(hoverData, clickData, filingSelections, trackingSelection
         # xaxis_title="Time",
         # yaxis_title="Weekly Filing Count",
         xaxis = dict(
-            rangeslider = {'visible': True},
-            range = time_range if time_range!=default_timerange else None, # keep time_range permanently to keep everything 2000-2024
-            autorange = False if time_range!=default_timerange else True, # keep false permanently to keep everything 2000-2024
+            rangeslider = {'visible': True,},# 'range':default_timerange},
+            range = time_range if time_range!=default_timerange else default_timerange, # keep time_range permanently to keep everything 2000-2024
+            autorange = False, #if time_range!=default_timerange else True, # keep false permanently to keep everything 2000-2024
+            # autorangeoptions = {'minallowed':default_timerange[0], 'maxallowed':default_timerange[1]},
         ),
-        margin={"t": 40, "b": 0},
+        margin={"t": 40, "b": 0, "l": 0, "r": 0},
         height=250,
     )
 
