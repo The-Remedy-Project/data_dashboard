@@ -322,7 +322,6 @@ app.layout = html.Div([
     ],
 )
 def update_time_range(casects_relayout, time_range):
-    print(casects_relayout)
     if casects_relayout:
         time_range = casects_relayout.get(
             'xaxis.range',
@@ -624,7 +623,7 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection,selected_s
 
     info = clickData if clickData else hoverData #hoverData if hoverData else clickData
     selected_subj_code_list = [subj_rows[i]['value'] for i in selected_subj_rows]
-    print(time_range[0])
+
     time_start_dt = datetime.strptime(time_range[0],
                                       '%Y-%m-%d %H:%M:%S.%f' if len(time_range[0].split(' ')) > 1 else '%Y-%m-%d')
     time_end_dt = datetime.strptime(time_range[1],
