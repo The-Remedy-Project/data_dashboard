@@ -1,8 +1,14 @@
+import os
+
 import pandas as pd
 import polars as pl
 import numpy as np
 from datetime import datetime
 import gc
+try:
+    from werkzeug.middleware.profiler import ProfilerMiddleware
+except:
+    print("You are missing the werkzeug package. No issue, unless you want to be profiling.")
 # import matplotlib.pyplot as plt
 
 # import re
@@ -12,6 +18,7 @@ import gc
 import plotly.graph_objects as go
 from dash import Dash, html, dash_table, dcc, Input, Output, State, \
     callback, callback_context
+from dash.exceptions import PreventUpdate
 
 regional_office_codes = ['MXR', 'NCR', 'NER', 'SCR', 'SER', 'WXR']
 central_office_code = 'BOP'
@@ -63,7 +70,7 @@ used_fields = ['ITERLVL','CDFCLRCV','CDOFCRCV','CDSTATUS','sitdtrcv',
 
 # load the complaint filings data into a pandas DataFrame
 cpt_df = pl.scan_parquet('../data/complaint-filings-optimized.parquet')#, columns=used_fields)
-gc.collect()
+
 # cpt_df = pd.read_parquet('https://drive.google.com/uc?export=download&id=1ST06IlcakkLsR-KNoXtop1ut9QbAiDdC',)
 # _parquet_kwargs = {"engine": "pyarrow",
 #                    "compression": "brotli",
@@ -453,8 +460,6 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
     summary_df = pd.merge(summary_df, name_key_df, left_on=trackingSelection, right_on='facility_code')
     summary_df = summary_df[summary_df['latitude'].notnull()]
 
-    gc.collect()
-
     summary_df['hover_template'] = np.where(summary_df['pop_total'].notnull(), 
                                             "<b>%{hovertext}</b><br>" + 
                                                  "2024 Population: %{customdata[0]:,}<br>" +
@@ -621,6 +626,12 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection,selected_s
     # else:
     #     time_range = default_timerange
 
+    # If hoverData changes, only update pie if there is no clickData
+    if ((clickData is not None) and
+        ('institution-map.hoverData' in callback_context.triggered_prop_ids) and
+        (len(callback_context.triggered_prop_ids) <= 1)):
+        raise PreventUpdate()
+
     info = clickData if clickData else hoverData #hoverData if hoverData else clickData
     selected_subj_code_list = [subj_rows[i]['value'] for i in selected_subj_rows]
 
@@ -655,8 +666,6 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection,selected_s
         .filter(~pl.col('CDSTATUS').eq('ACC'))  # Exclude 'ACC' status if it exists
     )
     counts_df = counts_df.collect().to_pandas().set_index('CDSTATUS').reindex(['CLG','CLO','CLD','REJ'])
-
-    gc.collect()
 
     labels = [status_dict[status] for status in counts_df.index]
     
@@ -711,6 +720,13 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection,selected_s
     ],
 )
 def update_case_counts(hoverData, clickData, filingSelections, trackingSelection,selected_subj_rows, subj_rows, time_range):
+
+    # If hoverData changes, only update pie if there is no clickData
+    if ((clickData is not None) and
+            ('institution-map.hoverData' in callback_context.triggered_prop_ids) and
+            (len(callback_context.triggered_prop_ids) <= 1)):
+        raise PreventUpdate()
+
     info = clickData if clickData else hoverData  # hoverData if hoverData else clickData
     selected_subj_code_list = [subj_rows[i]['value'] for i in selected_subj_rows]
 
@@ -749,7 +765,6 @@ def update_case_counts(hoverData, clickData, filingSelections, trackingSelection
         .to_pandas()
     )
 
-    gc.collect()
     case_counts_df['monthly_rolling_avg'] = case_counts_df['case_count'].rolling(window=4).mean()
     case_counts_df['monthly_rolling_sum'] = case_counts_df['case_count'].rolling(window=4, min_periods=1).sum()
 
@@ -782,4 +797,16 @@ def update_case_counts(hoverData, clickData, filingSelections, trackingSelection
     return fig
     
 if __name__ == "__main__":
+
+    # see https://community.plotly.com/t/performance-profiling-dash-apps-with-werkzeug/65199
+    if os.getenv("PROFILER", None):
+        app.server.config["PROFILE"] = True
+        app.server.wsgi_app = ProfilerMiddleware(
+            app.server.wsgi_app,
+            sort_by=("tottime", "cumtime"),
+            restrictions=[50],
+            stream=None,
+            profile_dir='./profiling',
+        )
+
     app.run(debug=False, port=8051)
