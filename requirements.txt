@@ -1,9 +1,8 @@
-dash==2.18.1
-fastparquet==2024.5.0
-numpy==2.1.2
-pandas==2.2.3
+dash==2.18.2
+fastparquet==2024.11.0
+numpy==2.2.1
 plotly==5.24.1
-polars==1.11.0
-pyarrow==17.0.0
-requests_html==0.10.0
+polars==1.17.1
+pyarrow==19.0.0
+requests-html==0.10.0
 gunicorn
