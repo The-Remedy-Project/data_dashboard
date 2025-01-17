@@ -769,15 +769,18 @@ def update_case_counts(hoverData, clickData, filingSelections, trackingSelection
         .group_by_dynamic('sitdtrcv', every='1w',start_by='datapoint')  # Weekly resampling
         .agg(pl.len().alias('case_count'))
         .select(['sitdtrcv', 'case_count'])  # Keep only necessary columns
-    )
-    # filling in gaps and convert to pandas
-    #### see: https://www.rhosignal.com/posts/filling-gaps-lazy-mode/
-    case_counts_df = (
-        case_counts_df
         .collect()
-        .upsample('sitdtrcv', every='1w')
-        .fill_null(strategy='zero')
     )
+
+    # can only upsample if DataFrame isn't empty
+    if len(case_counts_df) > 0:
+        # filling in gaps and convert to pandas
+        #### see: https://www.rhosignal.com/posts/filling-gaps-lazy-mode/
+        case_counts_df = (
+            case_counts_df
+            .upsample('sitdtrcv', every='1w')
+            .fill_null(strategy='zero')
+        )
 
     case_counts_df = case_counts_df.with_columns([
         pl.col("case_count").rolling_mean(window_size=4).alias("monthly_rolling_avg"),
