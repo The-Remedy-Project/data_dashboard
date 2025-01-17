@@ -7,8 +7,10 @@ services:
     # A requirements.txt file must exist
     buildCommand: "pip install -r requirements.txt"
     # A src/[app_name].py file must exist and contain `server=app.server`
-    startCommand: "gunicorn --workers=1 -k gthread --chdir src data_dashboard:server"
+    startCommand: "gunicorn --chdir src data_dashboard:server"
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
+      - key: POLARS_MAX_THREADS
+        value: 1
         
