@@ -11,6 +11,8 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
-      - key: POLARS_MAX_THREADS
-        value: 1
+      # https://community.render.com/t/timeout-when-preloading-pytorch-model-using-flask-on-render-com/1318/4
+      # render secretly adds a --preload flag, we explicitly remove it here
+      - key: GUNICORN_CMD_ARGS
+        value: --access-logfile - --bind=0.0.0.0:10000
         
