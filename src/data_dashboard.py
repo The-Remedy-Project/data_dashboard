@@ -1,10 +1,8 @@
 import os
 
-import pandas as pd
 import polars as pl
 import numpy as np
 from datetime import datetime
-import gc
 try:
     from werkzeug.middleware.profiler import ProfilerMiddleware
 except:
@@ -19,6 +17,8 @@ import plotly.graph_objects as go
 from dash import Dash, html, dash_table, dcc, Input, Output, State, \
     callback, callback_context
 from dash.exceptions import PreventUpdate
+
+pl.enable_string_cache()
 
 regional_office_codes = ['MXR', 'NCR', 'NER', 'SCR', 'SER', 'WXR']
 central_office_code = 'BOP'
@@ -68,7 +68,7 @@ complaint_data_dtype_dict = {
 used_fields = ['ITERLVL','CDFCLRCV','CDOFCRCV','CDSTATUS','sitdtrcv',
                'accept','reject','deny','grant','other','cdsub1cb']
 
-# load the complaint filings data into a pandas DataFrame
+# load the complaint filings data into a polars LazyFrame
 cpt_df = pl.scan_parquet('../data/complaint-filings-optimized.parquet')#, columns=used_fields)
 
 # cpt_df = pd.read_parquet('https://drive.google.com/uc?export=download&id=1ST06IlcakkLsR-KNoXtop1ut9QbAiDdC',)
@@ -81,11 +81,14 @@ cpt_df = pl.scan_parquet('../data/complaint-filings-optimized.parquet')#, column
 
 # cpt_df[['sdtdue', 'sdtstat', 'sitdtrcv']] = cpt_df[['sdtdue', 'sdtstat', 'sitdtrcv']].apply(pd.to_datetime, format='%Y-%m-%d', errors='coerce',)
 
-name_key_df = pd.read_csv('../data/facility-info.csv',)
+name_key_df = pl.read_csv('../data/facility-info.csv', schema_overrides={'facility_code': pl.Categorical})
 
-subj_codes_df = pd.read_csv('https://drive.google.com/uc?export=download&id=1OQ8xLLF3hG3Dtd9C_LJpvngfsH3YO-5B')
+subj_codes_df = pl.read_csv('https://drive.google.com/uc?export=download&id=1OQ8xLLF3hG3Dtd9C_LJpvngfsH3YO-5B')
 
-subj_code_opts = [{'label':row['secondary_desc'], 'value':row['code']} for i, row in subj_codes_df.iterrows()]
+subj_code_opts = [
+    {'label': row['secondary_desc'], 'value': row['code']}
+    for row in subj_codes_df.iter_rows(named=True)
+]
 subj_code_opts = sorted(subj_code_opts, key=lambda x: x['label'])
 # subj_code_opts = [{'label': 'SELECT ALL', 'value': 'all'}] + subj_code_opts
 
@@ -415,7 +418,7 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
 
     filter_expr = (
             (pl.col('ITERLVL').is_in(filingSelections)) &
-            (pl.col('cdsub1cb').cast(pl.String).is_in(selected_subj_code_list)) &
+            (pl.col('cdsub1cb').is_in(selected_subj_code_list)) &
             (pl.col('sitdtrcv').is_between(time_start_dt, time_end_dt))
     )
 
@@ -442,42 +445,53 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
             pl.col('other').sum().alias('closed_other_cases'),
             pl.col('accept').sum().alias('accepted_cases')
         ])
+        .with_columns([
+            (pl.col('rejected_cases') + pl.col('denied_cases') + pl.col('granted_cases') + pl.col('closed_other_cases'))
+            .alias('total_closed_cases'),
+            (1 - (pl.col('granted_cases') /
+                  (pl.col('rejected_cases') + pl.col('denied_cases') + pl.col('granted_cases') + pl.col(
+                      'closed_other_cases'))))
+            .alias('no_remedy_frac')
+        ])
     )
 
-    summary_df = summary_df.collect().to_pandas()
-    # summary_df = cpt_df[filter_mask].groupby(
-    #     trackingSelection, sort=False, observed=True
-    # ).agg(
-    #     total_cases=('CDSTATUS', 'size'),
-    #     rejected_cases=('reject', 'sum'),
-    #     denied_cases=('deny', 'sum'),
-    #     granted_cases=('grant', 'sum'),
-    #     closed_other_cases=('other', 'sum'),
-    #     accepted_cases=('accept', 'sum')
-    # ).reset_index()
-    summary_df['total_closed_cases'] = summary_df['rejected_cases'] + summary_df['denied_cases'] + summary_df['granted_cases'] + summary_df['closed_other_cases']
-    summary_df['no_remedy_frac'] = 1 - (summary_df['granted_cases'] / summary_df['total_closed_cases'])
-    summary_df = pd.merge(summary_df, name_key_df, left_on=trackingSelection, right_on='facility_code')
-    summary_df = summary_df[summary_df['latitude'].notnull()]
+    summary_df = summary_df.collect()
 
-    summary_df['hover_template'] = np.where(summary_df['pop_total'].notnull(), 
-                                            "<b>%{hovertext}</b><br>" + 
-                                                 "2024 Population: %{customdata[0]:,}<br>" +
-                                                 f"Total cases ({time_start_str}-{time_end_str}): " + "%{customdata[1]:,}<br>" +
-                                                 "Rejection/Denial Rate: %{customdata[2]:.1%}<br>" +
-                                                 "<extra></extra>", 
-                                            "<b>%{hovertext}</b><br>" + 
-                                                 f"Total cases ({time_start_str}-{time_end_str}): " + "%{customdata[1]:,}<br>" +
-                                                 "Rejection/Denial Rate: %{customdata[2]:.1%}<br>" +
-                                                 "<extra></extra>"
-                                           )
+    # Join with `name_key_df`
+    summary_df = summary_df.join(name_key_df, left_on=trackingSelection, right_on='facility_code', coalesce=False)
 
-    # Split the data based on category
-    region_mask = summary_df[trackingSelection].isin(regional_office_codes)
-    central_mask = summary_df[trackingSelection].isin([central_office_code])
-    dff_F = summary_df[~np.logical_or(region_mask, central_mask)]
-    dff_R = summary_df[region_mask]
-    dff_A = summary_df[central_mask]
+    # Filter rows where 'latitude' is not null
+    summary_df = summary_df.filter(pl.col('latitude').is_not_null())
+
+    # Add hover_template column
+    summary_df = summary_df.with_columns(
+        pl.when(pl.col('pop_total').is_not_null())
+        .then(
+            pl.lit(
+                "<b>%{hovertext}</b><br>" +
+                f"2024 Population: " + "%{customdata[0]:,}<br>" +
+                f"Total cases ({time_start_str}-{time_end_str}): " + "%{customdata[1]:,}<br>" +
+                "Rejection/Denial Rate: %{customdata[2]:.1%}<br>" +
+                "<extra></extra>"
+            )
+        )
+        .otherwise(
+            pl.lit(
+            "<b>%{hovertext}</b><br>" +
+                f"Total cases ({time_start_str}-{time_end_str}): " + "%{customdata[1]:,}<br>" +
+                "Rejection/Denial Rate: %{customdata[2]:.1%}<br>" +
+                "<extra></extra>"
+            )
+        ).alias('hover_template')
+    )
+
+    # Split data based on category
+    region_mask = summary_df[trackingSelection].is_in(regional_office_codes)
+    central_mask = summary_df[trackingSelection].is_in([central_office_code])
+
+    dff_F = summary_df.filter(~(region_mask | central_mask))
+    dff_R = summary_df.filter(region_mask)
+    dff_A = summary_df.filter(central_mask)
 
     sizemax = 20
     casetotalmax = filtered_count/50 #np.sum(filter_mask)/50 #np.max(summary_df['total_closed_cases'])/10
@@ -642,7 +656,7 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection,selected_s
 
     filter_expr = (
             (pl.col('ITERLVL').is_in(filingSelections)) &
-            (pl.col('cdsub1cb').cast(pl.String).is_in(selected_subj_code_list)) &
+            (pl.col('cdsub1cb').is_in(selected_subj_code_list)) &
             (pl.col('sitdtrcv').is_between(time_start_dt, time_end_dt))
     )
     # filter_mask = cpt_df['ITERLVL'].isin(filingSelections)
@@ -656,18 +670,19 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection,selected_s
         inst_code = info['points'][0]['customdata'][3]
         # filter_mask &= (cpt_df[trackingSelection] == inst_code)
         filter_expr &= (pl.col(trackingSelection) == inst_code)
-        inst_name = name_key_df[name_key_df['facility_code']==inst_code]['nice_name'].values[0]
-    # counts_df = cpt_df[filter_mask]['CDSTATUS'].value_counts().drop('ACC', errors='ignore').reindex(['REJ', 'CLG','CLD', 'CLO',])
+        inst_name = name_key_df.filter(pl.col('facility_code') == inst_code)['nice_name'][0]
+
     counts_df = (
         cpt_df
         .filter(filter_expr)
         .group_by('CDSTATUS')
         .agg(pl.len().alias('values')) #.len().alias('value')
         .filter(~pl.col('CDSTATUS').eq('ACC'))  # Exclude 'ACC' status if it exists
+        .sort(pl.col('CDSTATUS').cast(pl.Enum(['CLG','CLO','CLD','REJ'])))
     )
-    counts_df = counts_df.collect().to_pandas().set_index('CDSTATUS').reindex(['CLG','CLO','CLD','REJ'])
+    counts_df = counts_df.collect()
 
-    labels = [status_dict[status] for status in counts_df.index]
+    labels = [status_dict[status] for status in counts_df['CDSTATUS']]
     
     colors = [color_map_pie.get(label, 'gray') for label in labels]
 
@@ -687,7 +702,9 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection,selected_s
     fig.update_traces(hoverinfo='label+percent', 
                       textinfo='value', 
                       # text=[val for val in counts_df.values],
-                      textfont_size=18, pull=[0.3,0,0,0], sort=False, rotation=270,
+                      textfont_size=18,
+                      pull=[0.3,0,0,0] if 'CLG' in counts_df['CDSTATUS'] else [0,0,0,0],
+                      sort=False, rotation=270,
                       marker=dict(colors=colors, line=dict(color='#000000', width=1)))
     fig.update_layout(
         title=f'Administrative Remedy Outcomes<br>({inst_name})',
@@ -734,7 +751,7 @@ def update_case_counts(hoverData, clickData, filingSelections, trackingSelection
     # filter_mask &= cpt_df['cdsub1cb'].isin(selected_subj_code_list)
     filter_expr = (
             (pl.col('ITERLVL').is_in(filingSelections)) &
-            (pl.col('cdsub1cb').cast(pl.String).is_in(selected_subj_code_list))
+            (pl.col('cdsub1cb').is_in(selected_subj_code_list))
     )
 
     if info is None:
@@ -743,10 +760,8 @@ def update_case_counts(hoverData, clickData, filingSelections, trackingSelection
         inst_code = info['points'][0]['customdata'][3]
         # filter_mask &= (cpt_df[trackingSelection] == inst_code)
         filter_expr &= (pl.col(trackingSelection) == inst_code)
-        inst_name = name_key_df[name_key_df['facility_code'] == inst_code]['nice_name'].values[0]
+        inst_name = name_key_df.filter(pl.col('facility_code') == inst_code)['nice_name'][0]
 
-    # case_counts_df = cpt_df[filter_mask].set_index('sitdtrcv').resample('W').size().reset_index(name='case_count')
-    # case_counts_df = cpt_df[filter_mask].groupby(pd.Grouper(key='sitdtrcv', freq='W')).size().reset_index(name='case_count')
     case_counts_df = (
         cpt_df
         .filter(filter_expr)
@@ -762,11 +777,12 @@ def update_case_counts(hoverData, clickData, filingSelections, trackingSelection
         .collect()
         .upsample('sitdtrcv', every='1w')
         .fill_null(strategy='zero')
-        .to_pandas()
     )
 
-    case_counts_df['monthly_rolling_avg'] = case_counts_df['case_count'].rolling(window=4).mean()
-    case_counts_df['monthly_rolling_sum'] = case_counts_df['case_count'].rolling(window=4, min_periods=1).sum()
+    case_counts_df = case_counts_df.with_columns([
+        pl.col("case_count").rolling_mean(window_size=4).alias("monthly_rolling_avg"),
+        pl.col("case_count").rolling_sum(window_size=4, min_periods=1).alias("monthly_rolling_sum")
+    ])
 
 
     fig = go.Figure()
@@ -809,4 +825,4 @@ if __name__ == "__main__":
             profile_dir='./profiling',
         )
 
-    app.run(debug=False, port=8051)
+    app.run(debug=True, port=8051)

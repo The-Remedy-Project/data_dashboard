@@ -1,9 +1,15 @@
 This is the repository for The Remedy Project's Bureau of Prisons Administrative Remedy Data Dashboard. Code is written in Python with [Plotly Dash](https://dash.plotly.com/).
 
 # Local Development
-Clone the repository to your local machine, and install the contents of the `requirements.txt` file using pip or conda (recommended to do so in a virtual environment with python 3.10).
+Clone the repository to your local machine, and install the contents of the `requirements.txt` file using pip or conda (recommended to do so in a virtual environment with python 3.11).
 
-Inside the virtual environment, to start the web app, run (from the repo's base directory): 
+For conda, this looks like:
+```
+conda create --name [env_name] python=3.11 --file requirements.txt
+```
+For local development, `gunicorn` is not needed and can be temporarily removed from the `requirements.txt` file during environment creation.
+
+Once inside the virtual environment, to start the web app, run (from the repo's base directory): 
 ```
 python src/data_dashboard.py
 ```
