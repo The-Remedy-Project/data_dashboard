@@ -493,30 +493,6 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
     dff_R = summary_df.filter(region_mask)
     dff_A = summary_df.filter(central_mask)
 
-    # summary_df['total_closed_cases'] = summary_df['rejected_cases'] + summary_df['denied_cases'] + summary_df['granted_cases'] + summary_df['closed_other_cases']
-    # summary_df['no_remedy_frac'] = 1 - (summary_df['granted_cases'] / summary_df['total_closed_cases'])
-    # summary_df = pd.merge(summary_df, name_key_df, left_on=trackingSelection, right_on='facility_code')
-    # summary_df = summary_df[summary_df['latitude'].notnull()]
-    #
-    # summary_df['hover_template'] = np.where(summary_df['pop_total'].notnull(),
-    #                                         "<b>%{hovertext}</b><br>" +
-    #                                              "2024 Population: %{customdata[0]:,}<br>" +
-    #                                              f"Total cases ({time_start_str}-{time_end_str}): " + "%{customdata[1]:,}<br>" +
-    #                                              "Rejection/Denial Rate: %{customdata[2]:.1%}<br>" +
-    #                                              "<extra></extra>",
-    #                                         "<b>%{hovertext}</b><br>" +
-    #                                              f"Total cases ({time_start_str}-{time_end_str}): " + "%{customdata[1]:,}<br>" +
-    #                                              "Rejection/Denial Rate: %{customdata[2]:.1%}<br>" +
-    #                                              "<extra></extra>"
-    #                                        )
-    #
-    # # Split the data based on category
-    # region_mask = summary_df[trackingSelection].isin(regional_office_codes)
-    # central_mask = summary_df[trackingSelection].isin([central_office_code])
-    # dff_F = summary_df[~np.logical_or(region_mask, central_mask)]
-    # dff_R = summary_df[region_mask]
-    # dff_A = summary_df[central_mask]
-
     sizemax = 20
     casetotalmax = filtered_count/50 #np.sum(filter_mask)/50 #np.max(summary_df['total_closed_cases'])/10
 
