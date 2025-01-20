@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import polars as pl
 import numpy as np
@@ -17,6 +18,12 @@ import plotly.graph_objects as go
 from dash import Dash, html, dash_table, dcc, Input, Output, State, \
     callback, callback_context
 from dash.exceptions import PreventUpdate
+
+# Get the absolute path to the top-level directory
+BASE_DIR = Path(__file__).parent.parent
+
+# Path to the assets folder
+ASSETS_DIR = BASE_DIR / 'assets'
 
 pl.enable_string_cache()
 
@@ -69,7 +76,7 @@ used_fields = ['ITERLVL','CDFCLRCV','CDOFCRCV','CDSTATUS','sitdtrcv',
                'accept','reject','deny','grant','other','cdsub1cb']
 
 # load the complaint filings data into a polars LazyFrame
-cpt_df = pl.scan_parquet('../data/complaint-filings-optimized.parquet')#, columns=used_fields)
+cpt_df = pl.scan_parquet(f'{BASE_DIR}/data/complaint-filings-optimized.parquet')#, columns=used_fields)
 
 # cpt_df = pd.read_parquet('https://drive.google.com/uc?export=download&id=1ST06IlcakkLsR-KNoXtop1ut9QbAiDdC',)
 # _parquet_kwargs = {"engine": "pyarrow",
@@ -81,7 +88,7 @@ cpt_df = pl.scan_parquet('../data/complaint-filings-optimized.parquet')#, column
 
 # cpt_df[['sdtdue', 'sdtstat', 'sitdtrcv']] = cpt_df[['sdtdue', 'sdtstat', 'sitdtrcv']].apply(pd.to_datetime, format='%Y-%m-%d', errors='coerce',)
 
-name_key_df = pl.read_csv('../data/facility-info.csv', schema_overrides={'facility_code': pl.Categorical})
+name_key_df = pl.read_csv(f'{BASE_DIR}/data/facility-info.csv', schema_overrides={'facility_code': pl.Categorical})
 
 subj_codes_df = pl.read_csv('https://drive.google.com/uc?export=download&id=1OQ8xLLF3hG3Dtd9C_LJpvngfsH3YO-5B')
 
@@ -109,7 +116,7 @@ color_map_pie = {
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
-app = Dash(__name__, external_stylesheets=external_stylesheets)
+app = Dash(__name__, external_stylesheets=external_stylesheets, assets_folder=str(ASSETS_DIR), title="TRP's BOP Data Dashboard")
 
 server = app.server
 
