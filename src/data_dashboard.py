@@ -1,5 +1,5 @@
 import os
-from pathlib import PureWindowsPath, Path
+from pathlib import Path
 
 import polars as pl
 import numpy as np
