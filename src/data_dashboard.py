@@ -362,6 +362,9 @@ app.layout = dbc.Container(
                 dbc.ModalBody(
                     dcc.Markdown(modal_text)
                 ),
+                dbc.ModalFooter(
+                    dbc.Button("Close", id="close-modal-button", className="ms-auto", color='secondary', outline=True,)
+                ),
             ],
             id="help-modal",
             size='lg',
@@ -383,12 +386,12 @@ app.layout = dbc.Container(
 # Callbacks to manage modal behavior
 @app.callback(
     Output("help-modal", "is_open"),
-    [Input("open-modal-button", "n_clicks")],
+    [Input("open-modal-button", "n_clicks"), Input("close-modal-button", "n_clicks")],
     [State("help-modal", "is_open")],
     prevent_initial_call=True
 )
-def toggle_modal(open_click, is_open):
-    if open_click:
+def toggle_modal(open_click, close_click, is_open):
+    if open_click or close_click:
         return not is_open
     return is_open
 
