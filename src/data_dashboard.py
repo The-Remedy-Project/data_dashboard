@@ -544,7 +544,7 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
                 "<b>%{hovertext}</b><br>" +
                 f"2024 Population: " + "%{customdata[0]:,}<br>" +
                 f"Total cases ({time_start_str}-{time_end_str}): " + "%{customdata[1]:,}<br>" +
-                "Rejection/Denial Rate: %{customdata[2]:.1%}<br>" +
+                "Non-approval Rate: %{customdata[2]:.1%}<br>" +
                 "<extra></extra>"
             )
         )
@@ -552,7 +552,7 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
             pl.lit(
             "<b>%{hovertext}</b><br>" +
                 f"Total cases ({time_start_str}-{time_end_str}): " + "%{customdata[1]:,}<br>" +
-                "Rejection/Denial Rate: %{customdata[2]:.1%}<br>" +
+                "Non-approval Rate: %{customdata[2]:.1%}<br>" +
                 "<extra></extra>"
             )
         ).alias('hover_template')
