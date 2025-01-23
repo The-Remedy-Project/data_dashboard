@@ -352,7 +352,7 @@ app.layout = dbc.Container(
                 "position": "fixed",
                 "bottom": "20px",
                 "right": "20px",
-                "zIndex": 9999,
+                "zIndex": 1049, # modal zindex default is 1050
             },
         ),
         # Modal
