@@ -126,103 +126,58 @@ app = Dash(__name__, external_stylesheets=external_stylesheets, assets_folder=st
 
 server = app.server
 
-app.layout = dbc.Container(
-    html.Div([
-        html.Div([
-            html.Div([
-                html.Div([
-                    dbc.Label('Choose filing level:',
-                              style={'fontWeight': 'bold', 'margin-right': '20px'}),
+app.layout = dbc.Container([
+    dbc.Row([
+        dbc.Col([
+            dbc.Row(
+                dbc.Col([
+                    dbc.Label('Choose filing level:', style={'fontWeight': 'bold'}),
                     dbc.Checklist(
                         id='filing-level',
                         options=[
-                            {
-                                'label': 'Facility (BP9)',
-                                'value': 'F'
-                            },
-                            {
-                                'label': 'Region (BP10)',
-                                'value': 'R'
-                            },
-                            {
-                                'label': 'Agency (BP11)',
-                                'value': 'A'
-                            },
+                            {'label': 'Facility (BP9)', 'value': 'F'},
+                            {'label': 'Region (BP10)', 'value': 'R'},
+                            {'label': 'Agency (BP11)', 'value': 'A'},
                         ],
                         value=['F', 'R', 'A'],
                         inline=True,
                     ),
                     dcc.Store(data=['F'], id='filing-store')
-                ],
-                style={'width': '100%', 'margin-bottom': '40px'}),
-
-                html.Div([
-                    dbc.Label('Track cases by:',
-                              style={'fontWeight': 'bold', 'margin-right': '20px'}),
+                ])
+            ),
+            dbc.Row(
+                dbc.Col([
+                    dbc.Label('Track cases by:', style={'fontWeight': 'bold'}),
                     dbc.Select(
                         id='tracking-level',
                         options=[
-                            {
-                                'label': 'Institution of Origin',
-                                'value': 'CDFCLRCV'
-                            },
-                            {
-                                'label': 'Office Responsible for Outcome',
-                                'value': 'CDOFCRCV'
-                            },
+                            {'label': 'Institution of Origin', 'value': 'CDFCLRCV'},
+                            {'label': 'Office Responsible for Outcome', 'value': 'CDOFCRCV'},
                         ],
-                        # clearable=False,
-                        value='CDFCLRCV' #'CDFCLRCV',#'CDOFCRCV',
+                        value='CDFCLRCV',
                     ),
-                ],
-                style={'width': '100%'}),
-            ], style={'width': '50%', 'display': 'inline-block', 'vertical-align': 'top', 'padding-right': '20px'}),
-            # html.Div(
-            #     [
-            #         'Filter by case subject:',
-            #         dcc.Dropdown(
-            #             id="type-dropdown",
-            #             optionHeight=55,
-            #             options=subj_code_opts,
-            #             value=['all'],
-            #             multi=True,
-            #         ),
-            #     ],
-            #     style={'width': '33%', 'display': 'inline-block', 'vertical-align':'top'},
-            # ),
-            html.Div([
-                # html.Div([
-                #     html.Span('Filter cases by subject:', style={'fontWeight': 'bold', 'margin-right': '20px'}),
-                #     html.Button('Select All', id='all-button-genre', className='all-button' ),
-                #     html.Button('Select None', id='none-button-genre', className='none-button'),
-                # ],
-                #     className="multi-filter",
-                #     style={'width': '100%', 'display': 'flex', 'align-items': 'center', 'margin-bottom': '10px'},
-                # ),
-                html.Div([
-                    # Left-aligned text
-                    dbc.Label('Filter cases by subject:',
-                              style={'fontWeight': 'bold', 'margin-right': '20px'}),  # Label
-
-                    # Buttons pushed to the right
+                ])
+            ),
+        ], width=6),
+        dbc.Col([
+            dbc.Row([
+                dbc.Col(
+                    dbc.Label('Filter cases by subject:', style={'fontWeight': 'bold'}),
+                    width="auto"
+                ),
+                dbc.Col(
                     html.Div([
-                        dbc.Button('SELECT ALL', color='secondary', outline=True,
-                                   id='all-button-subj', className='all-button',
-                                    style={'margin-right': '10px', 'padding': '0 10px', 'height': '30px', 'margin-top':'5px',
-                                           'font-size':'12px','line-height':'8px', 'vertical-align':'middle'}),
-                        dbc.Button('SELECT NONE', color='secondary', outline=True,
-                                   id='none-button-subj', className='none-button',
-                                    style={'padding': '0 10px', 'height': '30px', 'margin-top':'5px',
-                                           'font-size':'12px','line-height':'8px', 'vertical-align':'middle'}),
-                    ], style={'display': 'flex'}),  # Inline-flex for the buttons
-                ], style={
-                    'display': 'flex',
-                    'justify-content': 'space-between',  # Push the buttons to the right
-                    'align-items': 'bottom',  # Vertically align both the text and buttons
-                    'margin-bottom': '10px'
-                }),
-
-                html.Div([
+                        dbc.Button('SELECT ALL', color='secondary', outline=True, id='all-button-subj',
+                                   className='all-button',
+                                   style={'margin-right': '10px', 'height': '30px', 'font-size': '12px'}),
+                        dbc.Button('SELECT NONE', color='secondary', outline=True, id='none-button-subj',
+                                   className='none-button', style={'height': '30px', 'font-size': '12px'}),
+                    ], style={'display': 'flex', 'justify-content': 'flex-end'}),  # Ensures buttons align right
+                    width=True
+                ),
+            ], justify="between", align="center"),
+            dbc.Row([
+                dbc.Col([
                     dash_table.DataTable(
                         id='datatable-subj-filter',
                         columns=[
@@ -279,45 +234,32 @@ app.layout = dbc.Container(
                         ],
                         style_as_list_view=True,
                     ),
-                    # html.Div(id='datatable-interactivity-container')
-                ],
-                ),
-            ],
-            className='individual-filter',
-            style={'width': '50%', 'display': 'inline-block', 'vertical-align':'top'},
-            ),
-        ], style={'display': 'flex', 'width': '100%'}),
-
-        html.Div([
-            html.Hr(
-                style={'width': '100%', 'padding':'0px',},
-            )
-        ], style={'width': '100%', 'padding':'0px',}),
-        # html.Div([
-        #     dcc.Graph(id='institution-map')
-        # ], style={'width': '75%', 'display': 'inline-block'}),
-        html.Div([
-            html.Div(
-                html.Div([
-                    dcc.Graph(id='institution-map', clear_on_unhover=True)
                 ]),
-                id='graph-container',
-                style={'width': '50%', 'display': 'inline-block',  'padding':'0px',}
-            ),
+            ]),
+        ], width=6)
+    ], className='mt-1'),
 
+    dbc.Row([dbc.Col(html.Hr(), width=12)]),
+
+    dbc.Row([
+        dbc.Col(
             html.Div(
-                dcc.Graph(
-                    id='institution-pie',
-                    figure={
-                        'layout': go.Layout(
-                            margin=dict(l=10, r=10, t=10, b=10),  # Tight margins
-                        )
-                    }
-                ),
-                style={'width': '50%', 'display': 'inline-block', 'padding':'0px'}),
-            ], style={'height':'300px'},
+                dcc.Graph(id='institution-map', clear_on_unhover=True),
+                id='graph-container',
+            ),
+            width=6
         ),
-        html.Div(
+        dbc.Col(
+            dcc.Graph(
+                id='institution-pie',
+                figure={'layout': go.Layout(margin=dict(l=10, r=10, t=10, b=10))}
+            ),
+            width=6
+        )
+    ], className='mb-4'),
+
+    dbc.Row([
+        dbc.Col(
             dcc.Graph(
                 id='case-cts',
                 figure={
@@ -326,62 +268,44 @@ app.layout = dbc.Container(
                     )
                 }
             ),
-            style={'width': '100%', 'display': 'inline-block', 'padding':'0px'}),
-        # dmc.Affix(
-        #     dmc.Button("I'm in an Affix Component"), position={"bottom": 20, "right": 20}
-        # )
-        # Affix Button
-        html.Div(
-            dbc.Button(
-                html.I(className="bi bi-info-circle"),
-                id="open-modal-button",
-                color="rgb(232, 232, 232)",
-                style={
-                    "borderRadius": "50%",  # Make it a circle
-                    "width": "50px",        # Ensure equal width and height
-                    "height": "50px",
-                    "display": "flex",      # Center the icon
-                    "justifyContent": "center",
-                    "alignItems": "center",
-                    "padding": "0",         # Remove extra padding
-                    "font-size": "40px",
-                    "backgroundColor": "transparent",
-                },
-            ),
+            width=12,
+        )
+    ]),
+
+    html.Div(
+        dbc.Button(
+            html.I(className="bi bi-info-circle"),
+            id="open-modal-button",
+            color="rgb(232, 232, 232)",
             style={
-                "position": "fixed",
-                "bottom": "20px",
-                "right": "20px",
-                "zIndex": 1049, # modal zindex default is 1050
+                "borderRadius": "50%",  # Make it a circle
+                "width": "50px",        # Ensure equal width and height
+                "height": "50px",
+                "display": "flex",      # Center the icon
+                "justifyContent": "center",
+                "alignItems": "center",
+                "padding": "0",         # Remove extra padding
+                "font-size": "40px",
+                "backgroundColor": "transparent",
             },
         ),
-        # Modal
-        dbc.Modal(
-            [
-                dbc.ModalHeader(dbc.ModalTitle("Info")),
-                dbc.ModalBody(
-                    dcc.Markdown(modal_text)
-                ),
-                dbc.ModalFooter(
-                    dbc.Button("Close", id="close-modal-button", className="ms-auto", color='secondary', outline=True,)
-                ),
-            ],
-            id="help-modal",
-            size='lg',
-            is_open=True,
-        ),
-        # html.Div(dcc.RangeSlider(
-        #     cpt_df['sitdtrcv'].min(),
-        #     cpt_df['sitdtrcv'].min(),
-        #     step=1,
-        #     id='crossfilter-year--slider',
-        #     value=df['Year'].max(),
-        #     marks={str(year): str(year) for year in df['Year'].unique()}
-        # ), style={'width': '49%', 'padding': '0px 20px 20px 20px'})
-        dcc.Store(id='time_range', data=default_timerange),
-    ]),
-    fluid=True
-)
+        style={
+            "position": "fixed",
+            "bottom": "20px",
+            "right": "20px",
+            "zIndex": 1049, # modal zindex default is 1050
+        },
+    ),
+
+    dbc.Modal([
+        dbc.ModalHeader(dbc.ModalTitle("Info")),
+        dbc.ModalBody(dcc.Markdown(modal_text)),
+        dbc.ModalFooter(
+            dbc.Button("Close", id="close-modal-button", className="ms-auto", color='secondary', outline=True))
+    ], id="help-modal", size='lg', is_open=True),
+
+    dcc.Store(id='time_range', data=default_timerange)
+], fluid=True)
 
 # Callbacks to manage modal behavior
 @app.callback(
@@ -882,7 +806,7 @@ def update_case_counts(hoverData, clickData, filingSelections, trackingSelection
             autorange = False, #if time_range!=default_timerange else True, # keep false permanently to keep everything 2000-2024
             # autorangeoptions = {'minallowed':default_timerange[0], 'maxallowed':default_timerange[1]},
         ),
-        margin={"t": 40, "b": 0, "l": 0, "r": 0},
+        margin={"t": 40, "b": 0, "l": 0, "r": 5},
         height=250,
     )
 
