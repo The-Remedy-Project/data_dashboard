@@ -38,6 +38,21 @@ central_office_code = 'BOP'
 
 default_timerange = ['2000-01-01', '2024-06-01'] #datetime.today().strftime('%Y-%m-%d')]
 
+class MetricCard(dbc.Card):
+    def __init__(
+        self,
+        title,
+        id,
+    ):
+        super().__init__(
+            children=[
+                html.H1("-", id={"type": "metric-value", "index": id}),
+                html.P(title, id={"type": "metric-text", "index": id}),
+            ],
+            body=True,
+            className="my-auto",
+        )
+
 complaint_data_dtype_dict = {
     "CASENBR": "int32",
     "ITERLVL": "category",
@@ -157,6 +172,11 @@ app.layout = dbc.Container([
                         value='CDFCLRCV',
                     ),
                 ])
+            ),
+            dbc.Row(
+                dbc.Col(
+                    MetricCard("Cases", id="cases-ticker"),
+                )
             ),
         ], width=6),
         dbc.Col([
@@ -619,6 +639,7 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
 
 @app.callback(
     Output('institution-pie', 'figure'),
+    Output({"type": "metric-value", "index": "cases-ticker"}, "children"),
     inputs = [
         Input('institution-map', 'hoverData'),
         Input('institution-map', 'clickData'),
@@ -717,7 +738,7 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection,selected_s
     #     )
     # )
                     
-    return fig
+    return fig, f'{counts_df["values"].sum():,}'
 
 @app.callback(
     Output('case-cts', 'figure'),
