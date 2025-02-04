@@ -18,6 +18,10 @@ import plotly.graph_objects as go
 from dash import Dash, html, dash_table, dcc, Input, Output, State, \
     callback, callback_context
 from dash.exceptions import PreventUpdate
+# import dash_mantine_components as dmc
+import dash_bootstrap_components as dbc
+
+pl.enable_string_cache()
 
 # Get the absolute path to the top-level directory
 BASE_DIR = Path(__file__).parent.parent
@@ -25,7 +29,9 @@ BASE_DIR = Path(__file__).parent.parent
 # Path to the assets folder
 ASSETS_DIR = BASE_DIR / 'assets'
 
-pl.enable_string_cache()
+# Read the Markdown content from the file
+with open(f'{ASSETS_DIR}/modal_text.md', 'r', encoding='utf8') as file:
+    modal_text = file.read()
 
 regional_office_codes = ['MXR', 'NCR', 'NER', 'SCR', 'SER', 'WXR']
 central_office_code = 'BOP'
@@ -114,220 +120,280 @@ color_map_pie = {
     'Granted':'#FFDEC2'
 }
 
-external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
+external_stylesheets = [dbc.themes.BOOTSTRAP,  dbc.icons.BOOTSTRAP] # ['https://codepen.io/chriddyp/pen/bWLwgP.css'] #[dbc.themes.BOOTSTRAP,  dbc.icons.BOOTSTRAP]
 
-app = Dash(__name__, external_stylesheets=external_stylesheets, assets_folder=str(ASSETS_DIR), title="TRP's BOP Data Dashboard")
+app = Dash(__name__, external_stylesheets=external_stylesheets, assets_folder=str(ASSETS_DIR), title="TRP's Administrative Remedy Dashboard")
 
 server = app.server
 
-app.layout = html.Div([
+app.layout = dbc.Container(
     html.Div([
         html.Div([
             html.Div([
-                html.Span('Choose filing level:',
-                          style={'fontWeight': 'bold', 'margin-right': '20px'}),
-                dcc.Checklist(
-                    id='filing-level',
-                    options=[
-                        {
-                            'label': 'Facility (BP9)',
-                            'value': 'F'
-                        },
-                        {
-                            'label': 'Region (BP10)',
-                            'value': 'R'
-                        },
-                        {
-                            'label': 'Agency (BP11)',
-                            'value': 'A'
-                        },
-                    ],
-                    value=['F', 'R', 'A'],
-                    inline=True,
-                ),
-                dcc.Store(data=['F'], id='filing-store')
-            ],
-            style={'width': '100%', 'margin-bottom': '40px'}),
+                html.Div([
+                    dbc.Label('Choose filing level:',
+                              style={'fontWeight': 'bold', 'margin-right': '20px'}),
+                    dbc.Checklist(
+                        id='filing-level',
+                        options=[
+                            {
+                                'label': 'Facility (BP9)',
+                                'value': 'F'
+                            },
+                            {
+                                'label': 'Region (BP10)',
+                                'value': 'R'
+                            },
+                            {
+                                'label': 'Agency (BP11)',
+                                'value': 'A'
+                            },
+                        ],
+                        value=['F', 'R', 'A'],
+                        inline=True,
+                    ),
+                    dcc.Store(data=['F'], id='filing-store')
+                ],
+                style={'width': '100%', 'margin-bottom': '40px'}),
 
-            html.Div([
-                html.Span('Track cases by:',
-                          style={'fontWeight': 'bold', 'margin-right': '20px'}),
-                dcc.Dropdown(
-                    id='tracking-level',
-                    options=[
-                        {
-                            'label': 'Institution of Origin',
-                            'value': 'CDFCLRCV'
-                        },
-                        {
-                            'label': 'Office Responsible for Outcome',
-                            'value': 'CDOFCRCV'
-                        },
-                    ],
-                    clearable=False,
-                    value='CDOFCRCV' #'CDFCLRCV',#'CDOFCRCV',
-                ),
-            ],
-            style={'width': '100%'}),
-        ], style={'width': '50%', 'display': 'inline-block', 'vertical-align': 'top', 'padding-right': '20px'}),
-        # html.Div(
-        #     [
-        #         'Filter by case subject:',
-        #         dcc.Dropdown(
-        #             id="type-dropdown",
-        #             optionHeight=55,
-        #             options=subj_code_opts,
-        #             value=['all'],
-        #             multi=True,
-        #         ),
-        #     ],
-        #     style={'width': '33%', 'display': 'inline-block', 'vertical-align':'top'},
-        # ),
-        html.Div([
-            # html.Div([
-            #     html.Span('Filter cases by subject:', style={'fontWeight': 'bold', 'margin-right': '20px'}),
-            #     html.Button('Select All', id='all-button-genre', className='all-button' ),
-            #     html.Button('Select None', id='none-button-genre', className='none-button'),
-            # ],
-            #     className="multi-filter",
-            #     style={'width': '100%', 'display': 'flex', 'align-items': 'center', 'margin-bottom': '10px'},
+                html.Div([
+                    dbc.Label('Track cases by:',
+                              style={'fontWeight': 'bold', 'margin-right': '20px'}),
+                    dbc.Select(
+                        id='tracking-level',
+                        options=[
+                            {
+                                'label': 'Institution of Origin',
+                                'value': 'CDFCLRCV'
+                            },
+                            {
+                                'label': 'Office Responsible for Outcome',
+                                'value': 'CDOFCRCV'
+                            },
+                        ],
+                        # clearable=False,
+                        value='CDFCLRCV' #'CDFCLRCV',#'CDOFCRCV',
+                    ),
+                ],
+                style={'width': '100%'}),
+            ], style={'width': '50%', 'display': 'inline-block', 'vertical-align': 'top', 'padding-right': '20px'}),
+            # html.Div(
+            #     [
+            #         'Filter by case subject:',
+            #         dcc.Dropdown(
+            #             id="type-dropdown",
+            #             optionHeight=55,
+            #             options=subj_code_opts,
+            #             value=['all'],
+            #             multi=True,
+            #         ),
+            #     ],
+            #     style={'width': '33%', 'display': 'inline-block', 'vertical-align':'top'},
             # ),
             html.Div([
-                # Left-aligned text
-                html.Span('Filter cases by subject:',
-                          style={'fontWeight': 'bold', 'margin-right': '20px'}),  # Label
-
-                # Buttons pushed to the right
+                # html.Div([
+                #     html.Span('Filter cases by subject:', style={'fontWeight': 'bold', 'margin-right': '20px'}),
+                #     html.Button('Select All', id='all-button-genre', className='all-button' ),
+                #     html.Button('Select None', id='none-button-genre', className='none-button'),
+                # ],
+                #     className="multi-filter",
+                #     style={'width': '100%', 'display': 'flex', 'align-items': 'center', 'margin-bottom': '10px'},
+                # ),
                 html.Div([
-                    html.Button('Select All', id='all-button-subj', className='all-button',
-                                style={'margin-right': '10px', 'padding': '0 10px', 'height': '25px',
-                                       'font-size':'12px','line-height':'8px', 'vertical-align':'middle'}),
-                    html.Button('Select None', id='none-button-subj', className='none-button',
-                                style={'padding': '0 10px', 'height': '25px',
-                                       'font-size':'12px','line-height':'8px', 'vertical-align':'middle'}),
-                ], style={'display': 'flex'}),  # Inline-flex for the buttons
-            ], style={
-                'display': 'flex',
-                'justify-content': 'space-between',  # Push the buttons to the right
-                'align-items': 'bottom',  # Vertically align both the text and buttons
-                'margin-bottom': '10px'
-            }),
+                    # Left-aligned text
+                    dbc.Label('Filter cases by subject:',
+                              style={'fontWeight': 'bold', 'margin-right': '20px'}),  # Label
 
-            html.Div([
-                dash_table.DataTable(
-                    id='datatable-subj-filter',
-                    columns=[
-                        {"name": '', "id": 'label'}
-                    ],
-                    data=subj_code_opts, #table that I defined at start
-                    fixed_rows={'headers': False},
-                    filter_action='native',
-                    row_selectable="multi",
-                    selected_rows=list(range(len(subj_code_opts))), # not needed done below instead
-                    virtualization=False,
-                    page_action='none',
-                    style_table={
-                        'minHeight': '120px',
-                        'maxHeight': '120px',
-                        'overflowY': 'auto',
-                    },
-                    css=[
-                        {
-                            'selector': '.dash-cell div.dash-cell-value',
-                            'rule': 'display: inline; white-space: inherit; overflow: inherit; text-overflow: inherit;',
+                    # Buttons pushed to the right
+                    html.Div([
+                        dbc.Button('SELECT ALL', color='secondary', outline=True,
+                                   id='all-button-subj', className='all-button',
+                                    style={'margin-right': '10px', 'padding': '0 10px', 'height': '30px', 'margin-top':'5px',
+                                           'font-size':'12px','line-height':'8px', 'vertical-align':'middle'}),
+                        dbc.Button('SELECT NONE', color='secondary', outline=True,
+                                   id='none-button-subj', className='none-button',
+                                    style={'padding': '0 10px', 'height': '30px', 'margin-top':'5px',
+                                           'font-size':'12px','line-height':'8px', 'vertical-align':'middle'}),
+                    ], style={'display': 'flex'}),  # Inline-flex for the buttons
+                ], style={
+                    'display': 'flex',
+                    'justify-content': 'space-between',  # Push the buttons to the right
+                    'align-items': 'bottom',  # Vertically align both the text and buttons
+                    'margin-bottom': '10px'
+                }),
+
+                html.Div([
+                    dash_table.DataTable(
+                        id='datatable-subj-filter',
+                        columns=[
+                            {"name": '', "id": 'label'}
+                        ],
+                        data=subj_code_opts, #table that I defined at start
+                        fixed_rows={'headers': False},
+                        filter_action='native',
+                        row_selectable="multi",
+                        selected_rows=list(range(len(subj_code_opts))), # not needed done below instead
+                        virtualization=False,
+                        page_action='none',
+                        style_table={
+                            'minHeight': '120px',
+                            'maxHeight': '120px',
+                            'overflowY': 'auto',
                         },
-                        {
-                            'selector': 'tr:first-child',
-                            'rule':'''
-                                    display: None;
-                            '''
+                        css=[
+                            {
+                                'selector': '.dash-cell div.dash-cell-value',
+                                'rule': 'display: inline; white-space: inherit; overflow: inherit; text-overflow: inherit;',
+                            },
+                            {
+                                'selector': 'tr:first-child',
+                                'rule':'''
+                                        display: None;
+                                '''
+                            },
+                        ],
+                        filter_options={
+                            'case': 'insensitive',
+                            'placeholder_text': 'Search for specific case subjects...',
                         },
-                    ],
-                    filter_options={
-                        'case': 'insensitive',
-                        'placeholder_text': 'Search for specific case subjects...',
-                    },
-                    style_header={
-                        'backgroundColor': trp_color,
-                        'color': 'white',
-                        'fontSize': '14px',
-                        'fontWeight': 'bold',
-                        'textAlign': 'center',
-                    },
-                    style_cell={
-                        'whiteSpace': 'no-wrap',
-                        'overflow': 'hidden',
-                        'textOverflow': 'ellipsis',
-                        'maxWidth': 0,
-                        'textAlign': 'left',
-                    },
-                    style_data_conditional=[
-                        {
-                            'if': {'row_index': 'odd'},
-                            'backgroundColor': 'rgb(232, 232, 232)'
-                        }
-                    ],
-                    style_as_list_view=True,
+                        style_header={
+                            'backgroundColor': trp_color,
+                            'color': 'white',
+                            'fontSize': '14px',
+                            'fontWeight': 'bold',
+                            'textAlign': 'center',
+                        },
+                        style_cell={
+                            'whiteSpace': 'no-wrap',
+                            'overflow': 'hidden',
+                            'textOverflow': 'ellipsis',
+                            'maxWidth': 0,
+                            'fontSize': '12px',
+                            'textAlign': 'left',
+                        },
+                        style_data_conditional=[
+                            {
+                                'if': {'row_index': 'odd'},
+                                'backgroundColor': 'rgb(232, 232, 232)'
+                            }
+                        ],
+                        style_as_list_view=True,
+                    ),
+                    # html.Div(id='datatable-interactivity-container')
+                ],
                 ),
-                # html.Div(id='datatable-interactivity-container')
             ],
+            className='individual-filter',
+            style={'width': '50%', 'display': 'inline-block', 'vertical-align':'top'},
             ),
-        ],
-        className='individual-filter',
-        style={'width': '50%', 'display': 'inline-block', 'vertical-align':'top'},
-        ),
-    ], style={'display': 'flex', 'width': '100%'}),
+        ], style={'display': 'flex', 'width': '100%'}),
 
-    html.Div([
-        html.Hr(
-            style={'width': '100%', 'padding':'0px',},
-        )
-    ], style={'width': '100%', 'padding':'0px',}),
-    # html.Div([
-    #     dcc.Graph(id='institution-map')
-    # ], style={'width': '75%', 'display': 'inline-block'}),
-    html.Div([
-        html.Div(
-            html.Div([
-                dcc.Graph(id='institution-map', clear_on_unhover=True)
-            ]),
-            id='graph-container',
-            style={'width': '50%', 'display': 'inline-block',  'padding':'0px',}
-        ),
+        html.Div([
+            html.Hr(
+                style={'width': '100%', 'padding':'0px',},
+            )
+        ], style={'width': '100%', 'padding':'0px',}),
+        # html.Div([
+        #     dcc.Graph(id='institution-map')
+        # ], style={'width': '75%', 'display': 'inline-block'}),
+        html.Div([
+            html.Div(
+                html.Div([
+                    dcc.Graph(id='institution-map', clear_on_unhover=True)
+                ]),
+                id='graph-container',
+                style={'width': '50%', 'display': 'inline-block',  'padding':'0px',}
+            ),
 
+            html.Div(
+                dcc.Graph(
+                    id='institution-pie',
+                    figure={
+                        'layout': go.Layout(
+                            margin=dict(l=10, r=10, t=10, b=10),  # Tight margins
+                        )
+                    }
+                ),
+                style={'width': '50%', 'display': 'inline-block', 'padding':'0px'}),
+            ], style={'height':'300px'},
+        ),
         html.Div(
             dcc.Graph(
-                id='institution-pie',
+                id='case-cts',
                 figure={
                     'layout': go.Layout(
-                        margin=dict(l=10, r=10, t=10, b=10),  # Tight margins
+                        margin=dict(l=0, r=0, t=0, b=0),  # Tight margins
                     )
                 }
             ),
-            style={'width': '50%', 'display': 'inline-block', 'padding':'0px'}),
-        ], style={'height':'300px'},
-    ),
-    html.Div(
-        dcc.Graph(
-            id='case-cts',
-            figure={
-                'layout': go.Layout(
-                    margin=dict(l=0, r=0, t=0, b=0),  # Tight margins
-                )
-            }
+            style={'width': '100%', 'display': 'inline-block', 'padding':'0px'}),
+        # dmc.Affix(
+        #     dmc.Button("I'm in an Affix Component"), position={"bottom": 20, "right": 20}
+        # )
+        # Affix Button
+        html.Div(
+            dbc.Button(
+                html.I(className="bi bi-info-circle"),
+                id="open-modal-button",
+                color="rgb(232, 232, 232)",
+                style={
+                    "borderRadius": "50%",  # Make it a circle
+                    "width": "50px",        # Ensure equal width and height
+                    "height": "50px",
+                    "display": "flex",      # Center the icon
+                    "justifyContent": "center",
+                    "alignItems": "center",
+                    "padding": "0",         # Remove extra padding
+                    "font-size": "40px",
+                    "backgroundColor": "transparent",
+                },
+            ),
+            style={
+                "position": "fixed",
+                "bottom": "20px",
+                "right": "20px",
+                "zIndex": 1049, # modal zindex default is 1050
+            },
         ),
-        style={'width': '100%', 'display': 'inline-block', 'padding':'0px'}),
+        # Modal
+        dbc.Modal(
+            [
+                dbc.ModalHeader(dbc.ModalTitle("Info")),
+                dbc.ModalBody(
+                    dcc.Markdown(modal_text)
+                ),
+                dbc.ModalFooter(
+                    dbc.Button("Close", id="close-modal-button", className="ms-auto", color='secondary', outline=True,)
+                ),
+            ],
+            id="help-modal",
+            size='lg',
+            is_open=True,
+        ),
+        # html.Div(dcc.RangeSlider(
+        #     cpt_df['sitdtrcv'].min(),
+        #     cpt_df['sitdtrcv'].min(),
+        #     step=1,
+        #     id='crossfilter-year--slider',
+        #     value=df['Year'].max(),
+        #     marks={str(year): str(year) for year in df['Year'].unique()}
+        # ), style={'width': '49%', 'padding': '0px 20px 20px 20px'})
+        dcc.Store(id='time_range', data=default_timerange),
+    ]),
+    fluid=True
+)
 
-    # html.Div(dcc.RangeSlider(
-    #     cpt_df['sitdtrcv'].min(),
-    #     cpt_df['sitdtrcv'].min(),
-    #     step=1,
-    #     id='crossfilter-year--slider',
-    #     value=df['Year'].max(),
-    #     marks={str(year): str(year) for year in df['Year'].unique()}
-    # ), style={'width': '49%', 'padding': '0px 20px 20px 20px'})
-    dcc.Store(id='time_range', data=default_timerange),
-])
+# Callbacks to manage modal behavior
+@app.callback(
+    Output("help-modal", "is_open"),
+    [Input("open-modal-button", "n_clicks"), Input("close-modal-button", "n_clicks")],
+    [State("help-modal", "is_open")],
+    prevent_initial_call=True
+)
+def toggle_modal(open_click, close_click, is_open):
+    if open_click or close_click:
+        return not is_open
+    return is_open
 
 @app.callback(
     output = Output('time_range', 'data'),
@@ -478,7 +544,7 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
                 "<b>%{hovertext}</b><br>" +
                 f"2024 Population: " + "%{customdata[0]:,}<br>" +
                 f"Total cases ({time_start_str}-{time_end_str}): " + "%{customdata[1]:,}<br>" +
-                "Rejection/Denial Rate: %{customdata[2]:.1%}<br>" +
+                "Non-approval Rate: %{customdata[2]:.1%}<br>" +
                 "<extra></extra>"
             )
         )
@@ -486,7 +552,7 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
             pl.lit(
             "<b>%{hovertext}</b><br>" +
                 f"Total cases ({time_start_str}-{time_end_str}): " + "%{customdata[1]:,}<br>" +
-                "Rejection/Denial Rate: %{customdata[2]:.1%}<br>" +
+                "Non-approval Rate: %{customdata[2]:.1%}<br>" +
                 "<extra></extra>"
             )
         ).alias('hover_template')
