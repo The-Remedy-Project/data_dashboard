@@ -111,13 +111,17 @@ cpt_df = pl.scan_parquet(f'{BASE_DIR}/data/complaint-filings-optimized.parquet')
 
 name_key_df = pl.read_csv(f'{BASE_DIR}/data/facility-info.csv', schema_overrides={'facility_code': pl.Categorical})
 
-subj_codes_df = pl.read_csv('https://drive.google.com/uc?export=download&id=1OQ8xLLF3hG3Dtd9C_LJpvngfsH3YO-5B')
+subj_codes_df = pl.read_csv(f'{BASE_DIR}/data/subject-codes-updated.csv')
 
 subj_code_opts = [
-    {'label': row['secondary_desc'], 'value': row['code']}
+    {'label': row['secondary_desc'], 'category': row['clear_categories'], 'value': row['code']}
     for row in subj_codes_df.iter_rows(named=True)
 ]
+# print(subj_code_opts)
 subj_code_opts = sorted(subj_code_opts, key=lambda x: x['label'])
+subj_cat_opts = sorted(set([code_dict['category'] for code_dict in subj_code_opts]))
+# subj_code_opts = [{i:code_dict[i] for i in code_dict if i != 'category'} for code_dict in subj_code_opts]
+# print(subj_code_opts)
 # subj_code_opts = [{'label': 'SELECT ALL', 'value': 'all'}] + subj_code_opts
 
 status_dict = {'CLD': 'Denied', 
@@ -182,16 +186,31 @@ app.layout = dbc.Container([
         dbc.Col([
             dbc.Row([
                 dbc.Col(
-                    dbc.Label('Filter cases by subject:', style={'fontWeight': 'bold'}),
+                    dbc.Label('Filter by subject:', style={'fontWeight': 'bold'}),
                     width="auto"
                 ),
                 dbc.Col(
                     html.Div([
+                        dbc.DropdownMenu(
+                            children=[
+                                dbc.Checklist(
+                                    id='subj-cat-filter',
+                                    options=subj_cat_opts,
+                                    value=subj_cat_opts,
+                                    style={'font-size':'12px', 'overflow-y':'scroll', 'max-height': '100px'},
+                                ),
+                            ],
+                            color='secondary',
+                            direction='down',
+                            size='sm',
+                            label="SELECT BY CATEGORY",
+                            style={'margin-right': '10px'},
+                        ),
                         dbc.Button('SELECT ALL', color='secondary', outline=True, id='all-button-subj',
-                                   className='all-button',
-                                   style={'margin-right': '10px', 'height': '30px', 'font-size': '12px'}),
+                                   className='all-button', size='sm',
+                                   style={'margin-right': '10px', 'font-size': '12px'}),
                         dbc.Button('SELECT NONE', color='secondary', outline=True, id='none-button-subj',
-                                   className='none-button', style={'height': '30px', 'font-size': '12px'}),
+                                   className='none-button', size='sm', style={'font-size': '12px'}),
                     ], style={'display': 'flex', 'justify-content': 'flex-end'}),  # Ensures buttons align right
                     width=True
                 ),
@@ -201,7 +220,7 @@ app.layout = dbc.Container([
                     dash_table.DataTable(
                         id='datatable-subj-filter',
                         columns=[
-                            {"name": '', "id": 'label'}
+                            {'name': '', 'id': 'label'}
                         ],
                         data=subj_code_opts, #table that I defined at start
                         fixed_rows={'headers': False},
@@ -362,30 +381,51 @@ def update_time_range(casects_relayout, time_range):
 
 @app.callback(
     [
-        Output('datatable-subj-filter', "selected_rows"),
+        Output('datatable-subj-filter', 'selected_rows', allow_duplicate=True,),
+        Output('subj-cat-filter', 'value', allow_duplicate=True,),
+    ],
+    [
+        Input('datatable-subj-filter', 'selected_rows'),
+        Input('subj-cat-filter', 'value'),
+    ],
+    prevent_initial_call=True,
+)
+def update_subj_filter_by_category(selected_rows, selected_cats):
+    ctx = callback_context
+    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    if trigger_id == 'subj-cat-filter':
+        new_selected_rows = []
+        for i in range(len(subj_code_opts)):
+            for cat in selected_cats:
+                if subj_code_opts[i]['category'] == cat:
+                    new_selected_rows.append(i)
+                    continue
+        return new_selected_rows, selected_cats
+    elif trigger_id == 'datatable-subj-filter':
+        if len(selected_rows) == len(subj_code_opts):
+            return selected_rows, subj_cat_opts
+        else:
+            return selected_rows, []
+
+@app.callback(
+    [
+        Output('datatable-subj-filter', 'selected_rows'),
+        Output('subj-cat-filter', 'value'),
     ],
     [
         Input('all-button-subj', 'n_clicks'),
         Input('none-button-subj', 'n_clicks'),
     ],
-    [
-        State('datatable-subj-filter', "data"), #"derived_virtual_data"),
-    ]
+    prevent_initial_call=True,
 )
-def select_all_subj(all_clicks, none_clicks, selected_rows):
-    if selected_rows is None:
-        return [[]]
+def select_all_subj(all_clicks, none_clicks):
     ctx = callback_context
-    if not ctx.triggered:
-        button_id = 'No clicks yet'
-        return [list(range(len(subj_code_opts)))]
-    else:
-        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
 
     if button_id == 'all-button-subj':
-        return [[i for i in range(len(selected_rows))]]
+        return [i for i in range(len(subj_code_opts))], subj_cat_opts
     else:
-        return [[]]
+        return [], []
 
 @app.callback(
     Output('institution-map', 'clickData'),
@@ -429,9 +469,6 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
                                     '%Y-%m-%d %H:%M:%S.%f' if len(time_range[1].split(' ')) > 1 else '%Y-%m-%d')
     time_start_str = time_start_dt.strftime('%m/%Y')
     time_end_str = time_end_dt.strftime('%m/%Y')
-    # filter_mask = cpt_df['ITERLVL'].isin(filingSelections) & \
-    #               cpt_df['cdsub1cb'].isin(selected_subj_code_list) & \
-    #               (cpt_df['sitdtrcv'] > time_range[0]) & (cpt_df['sitdtrcv'] < time_range[1])
 
     filter_expr = (
             (pl.col('ITERLVL').is_in(filingSelections)) &
@@ -653,11 +690,6 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
     ],
 )
 def update_pie(hoverData,clickData,filingSelections,trackingSelection,selected_subj_rows, time_range, subj_rows):
-    # if casects_relayout:
-    #     time_range = casects_relayout.get('xaxis.range', default_timerange)
-    # else:
-    #     time_range = default_timerange
-
     # If hoverData changes, only update pie if there is no clickData
     if ((clickData is not None) and
         ('institution-map.hoverData' in callback_context.triggered_prop_ids) and
@@ -677,16 +709,11 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection,selected_s
             (pl.col('cdsub1cb').is_in(selected_subj_code_list)) &
             (pl.col('sitdtrcv').is_between(time_start_dt, time_end_dt))
     )
-    # filter_mask = cpt_df['ITERLVL'].isin(filingSelections)
-    # filter_mask &= cpt_df['cdsub1cb'].isin(selected_subj_code_list)
-    # filter_mask &= (cpt_df['sitdtrcv'] > time_range[0]) & (cpt_df['sitdtrcv'] < time_range[1])
-    
-    # dff = cpt_df[cpt_df['ITERLVL'].isin(filingSelections)]
+
     if info is None:
         inst_name = 'All Institutions'
     else:
         inst_code = info['points'][0]['customdata'][3]
-        # filter_mask &= (cpt_df[trackingSelection] == inst_code)
         filter_expr &= (pl.col(trackingSelection) == inst_code)
         inst_name = name_key_df.filter(pl.col('facility_code') == inst_code)['nice_name'][0]
 
@@ -741,6 +768,58 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection,selected_s
     return fig, f'{counts_df["values"].sum():,}'
 
 @app.callback(
+    Output('institution-sunburst', 'figure'),
+    inputs = [
+        Input('institution-map', 'hoverData'),
+        Input('institution-map', 'clickData'),
+        Input('filing-level', 'value'),
+        Input('tracking-level', 'value'),
+        Input('datatable-subj-filter', "selected_rows"),
+        Input('time_range', 'data'),
+    ],
+    state = [
+        State('datatable-subj-filter', "data"),
+    ],
+)
+def update_sunburst(hoverData,clickData,filingSelections,trackingSelection,selected_subj_rows, time_range, subj_rows):
+    # If hoverData changes, only update pie if there is no clickData
+    if ((clickData is not None) and
+        ('institution-map.hoverData' in callback_context.triggered_prop_ids) and
+        (len(callback_context.triggered_prop_ids) <= 1)):
+        raise PreventUpdate()
+
+    info = clickData if clickData else hoverData #hoverData if hoverData else clickData
+    selected_subj_code_list = [subj_rows[i]['value'] for i in selected_subj_rows]
+
+    time_start_dt = datetime.strptime(time_range[0],
+                                      '%Y-%m-%d %H:%M:%S.%f' if len(time_range[0].split(' ')) > 1 else '%Y-%m-%d')
+    time_end_dt = datetime.strptime(time_range[1],
+                                    '%Y-%m-%d %H:%M:%S.%f' if len(time_range[1].split(' ')) > 1 else '%Y-%m-%d')
+
+    filter_expr = (
+            (pl.col('ITERLVL').is_in(filingSelections)) &
+            (pl.col('cdsub1cb').is_in(selected_subj_code_list)) &
+            (pl.col('sitdtrcv').is_between(time_start_dt, time_end_dt))
+    )
+
+    if info is None:
+        inst_name = 'All Institutions'
+    else:
+        inst_code = info['points'][0]['customdata'][3]
+        filter_expr &= (pl.col(trackingSelection) == inst_code)
+        inst_name = name_key_df.filter(pl.col('facility_code') == inst_code)['nice_name'][0]
+
+    counts_df = (
+        cpt_df
+        .filter(filter_expr)
+        .group_by('CDSTATUS')
+        .agg(pl.len().alias('values')) #.len().alias('value')
+        .filter(~pl.col('CDSTATUS').eq('ACC'))  # Exclude 'ACC' status if it exists
+        .sort(pl.col('CDSTATUS').cast(pl.Enum(['CLG','CLO','CLD','REJ'])))
+    )
+    counts_df = counts_df.collect()
+
+@app.callback(
     Output('case-cts', 'figure'),
     inputs = [
         Input('institution-map', 'hoverData'),
@@ -755,7 +834,6 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection,selected_s
     ],
 )
 def update_case_counts(hoverData, clickData, filingSelections, trackingSelection,selected_subj_rows, subj_rows, time_range):
-
     # If hoverData changes, only update pie if there is no clickData
     if ((clickData is not None) and
             ('institution-map.hoverData' in callback_context.triggered_prop_ids) and
