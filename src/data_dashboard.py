@@ -1,4 +1,5 @@
 import os
+import textwrap
 from pathlib import Path
 
 import polars as pl
@@ -13,7 +14,7 @@ except:
 # import re
 # import json
 
-# import plotly.express as px
+import plotly.express as px
 import plotly.graph_objects as go
 from dash import Dash, html, dash_table, dcc, Input, Output, State, \
     callback, callback_context
@@ -46,11 +47,12 @@ class MetricCard(dbc.Card):
     ):
         super().__init__(
             children=[
-                html.H1("-", id={"type": "metric-value", "index": id}),
-                html.P(title, id={"type": "metric-text", "index": id}),
+                html.H4("-", id={"type": "metric-value", "index": id}, style={'margin': '0', 'padding': '0'}),
+                html.P(title, id={"type": "metric-text", "index": id}, style={'margin': '0', 'padding': '0'}),
             ],
             body=True,
-            className="my-auto",
+            color='#CED4DA',
+            className="my-auto text-center",
         )
 
 complaint_data_dtype_dict = {
@@ -113,16 +115,22 @@ name_key_df = pl.read_csv(f'{BASE_DIR}/data/facility-info.csv', schema_overrides
 
 subj_codes_df = pl.read_csv(f'{BASE_DIR}/data/subject-codes-updated.csv')
 
-subj_code_opts = [
+subj_opts = [
     {'label': row['secondary_desc'], 'category': row['clear_categories'], 'value': row['code']}
     for row in subj_codes_df.iter_rows(named=True)
 ]
-# print(subj_code_opts)
-subj_code_opts = sorted(subj_code_opts, key=lambda x: x['label'])
-subj_cat_opts = sorted(set([code_dict['category'] for code_dict in subj_code_opts]))
-# subj_code_opts = [{i:code_dict[i] for i in code_dict if i != 'category'} for code_dict in subj_code_opts]
-# print(subj_code_opts)
-# subj_code_opts = [{'label': 'SELECT ALL', 'value': 'all'}] + subj_code_opts
+# print(subj_opts)
+subj_opts = sorted(subj_opts, key=lambda x: x['label'])
+subj_cat_opts_list = sorted(set([subj_dict['category'] for subj_dict in subj_opts]))
+subj_cat_redund_list = [subj_dict['category'] for subj_dict in subj_opts]
+subj_desc_opts_list = [subj_dict['label'] for subj_dict in subj_opts]
+subj_code_opts_list = [subj_dict['value'] for subj_dict in subj_opts]
+
+subj_cats_df = pl.DataFrame({
+    'code': pl.Series(subj_code_opts_list, dtype=pl.Categorical),
+    'fine_cat': subj_desc_opts_list,
+    'gen_cat': subj_cat_redund_list,
+})
 
 status_dict = {'CLD': 'Denied', 
                'CLO': 'Closed (Other)', 
@@ -138,6 +146,9 @@ color_map_pie = {
     'Closed (Other)':'#9882AC',
     'Granted':'#FFDEC2'
 }
+long_color_seq = px.colors.qualitative.Prism + px.colors.qualitative.T10 + px.colors.qualitative.Plotly
+
+color_map_sunburst = {subj_cat:long_color_seq[i] for i, subj_cat in enumerate(subj_cat_opts_list)}
 
 external_stylesheets = [dbc.themes.BOOTSTRAP,  dbc.icons.BOOTSTRAP] # ['https://codepen.io/chriddyp/pen/bWLwgP.css'] #[dbc.themes.BOOTSTRAP,  dbc.icons.BOOTSTRAP]
 
@@ -177,12 +188,34 @@ app.layout = dbc.Container([
                     ),
                 ])
             ),
-            dbc.Row(
+            dbc.Row([
+                dbc.Col(
+                    MetricCard("Selected Institution", id="inst-card"),
+                    width=8,
+                ),
                 dbc.Col(
                     MetricCard("Cases", id="cases-ticker"),
-                )
+                    width=4,
+                ),
+            ], className='mt-2',),
+        ], width=5),
+        dbc.Col(
+            html.Div(
+                dcc.Graph(
+                    id='institution-map',
+                    clear_on_unhover=True,
+                    style={'height': '100%', 'width': '100%'},
+                ),
+                id='graph-container',
+                style={'height': '100%', 'display': 'flex'},
             ),
-        ], width=6),
+            width=7
+        ),
+    ], className='mt-1'),
+
+    dbc.Row([dbc.Col(html.Hr(), width=12)]),
+
+    dbc.Row([
         dbc.Col([
             dbc.Row([
                 dbc.Col(
@@ -195,8 +228,8 @@ app.layout = dbc.Container([
                             children=[
                                 dbc.Checklist(
                                     id='subj-cat-filter',
-                                    options=subj_cat_opts,
-                                    value=subj_cat_opts,
+                                    options=subj_cat_opts_list,
+                                    value=subj_cat_opts_list,
                                     style={'font-size':'12px', 'overflow-y':'scroll', 'max-height': '100px'},
                                 ),
                             ],
@@ -222,16 +255,16 @@ app.layout = dbc.Container([
                         columns=[
                             {'name': '', 'id': 'label'}
                         ],
-                        data=subj_code_opts, #table that I defined at start
+                        data=subj_opts, #table that I defined at start
                         fixed_rows={'headers': False},
                         filter_action='native',
                         row_selectable="multi",
-                        selected_rows=list(range(len(subj_code_opts))), # not needed done below instead
+                        selected_rows=list(range(len(subj_opts))), # not needed done below instead
                         virtualization=False,
                         page_action='none',
                         style_table={
                             'minHeight': '120px',
-                            'maxHeight': '120px',
+                            'maxHeight': '200px',
                             'overflowY': 'auto',
                         },
                         css=[
@@ -265,6 +298,12 @@ app.layout = dbc.Container([
                             'fontSize': '12px',
                             'textAlign': 'left',
                         },
+                        tooltip_data=[
+                            {
+                                column: {'value': str(value), 'type': 'markdown'}
+                                for column, value in row.items()
+                            } for row in subj_opts
+                        ],
                         style_data_conditional=[
                             {
                                 'if': {'row_index': 'odd'},
@@ -275,27 +314,21 @@ app.layout = dbc.Container([
                     ),
                 ]),
             ]),
-        ], width=6)
-    ], className='mt-1'),
-
-    dbc.Row([dbc.Col(html.Hr(), width=12)]),
-
-    dbc.Row([
+        ], width=4),
         dbc.Col(
-            html.Div(
-                dcc.Graph(id='institution-map', clear_on_unhover=True),
-                id='graph-container',
+            dcc.Graph(
+                id='institution-sunburst',
             ),
-            width=6
+            width=4,
         ),
         dbc.Col(
             dcc.Graph(
                 id='institution-pie',
                 figure={'layout': go.Layout(margin=dict(l=10, r=10, t=10, b=10))}
             ),
-            width=6
+            width=4
         )
-    ], className='mb-4'),
+    ], className='my-auto'),
 
     dbc.Row([
         dbc.Col(
@@ -358,6 +391,31 @@ def toggle_modal(open_click, close_click, is_open):
         return not is_open
     return is_open
 
+
+@app.callback(
+    Output({'type': 'metric-value', 'index': 'inst-card'}, 'children'),
+    inputs=[
+        Input('institution-map', 'hoverData'),
+        Input('institution-map', 'clickData'),
+    ],
+)
+def update_inst_card(hoverData, clickData,):
+    # If hoverData changes, only update pie if there is no clickData
+    if ((clickData is not None) and
+            ('institution-map.hoverData' in callback_context.triggered_prop_ids) and
+            (len(callback_context.triggered_prop_ids) <= 1)):
+        raise PreventUpdate()
+
+    info = clickData if clickData else hoverData  # hoverData if hoverData else clickData
+
+    if info is None:
+        inst_name = 'All Institutions'
+    else:
+        inst_code = info['points'][0]['customdata'][3]
+        inst_name = name_key_df.filter(pl.col('facility_code') == inst_code)['nice_name'][0]
+
+    return inst_name
+
 @app.callback(
     output = Output('time_range', 'data'),
     inputs = [
@@ -395,15 +453,15 @@ def update_subj_filter_by_category(selected_rows, selected_cats):
     trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
     if trigger_id == 'subj-cat-filter':
         new_selected_rows = []
-        for i in range(len(subj_code_opts)):
+        for i in range(len(subj_opts)):
             for cat in selected_cats:
-                if subj_code_opts[i]['category'] == cat:
+                if subj_opts[i]['category'] == cat:
                     new_selected_rows.append(i)
                     continue
         return new_selected_rows, selected_cats
     elif trigger_id == 'datatable-subj-filter':
-        if len(selected_rows) == len(subj_code_opts):
-            return selected_rows, subj_cat_opts
+        if len(selected_rows) == len(subj_opts):
+            return selected_rows, subj_cat_opts_list
         else:
             return selected_rows, []
 
@@ -423,7 +481,7 @@ def select_all_subj(all_clicks, none_clicks):
     button_id = ctx.triggered[0]['prop_id'].split('.')[0]
 
     if button_id == 'all-button-subj':
-        return [i for i in range(len(subj_code_opts))], subj_cat_opts
+        return [i for i in range(len(subj_opts))], subj_cat_opts_list
     else:
         return [], []
 
@@ -462,7 +520,7 @@ def update_checklist(value, active):
     ],
 )
 def update_map(filingSelections, trackingSelection, selected_subj_rows, time_range, subj_rows):
-    selected_subj_code_list = [subj_rows[i]['value'] for i in selected_subj_rows]
+    selected_subj_list = [subj_rows[i]['value'] for i in selected_subj_rows]
     time_start_dt = datetime.strptime(time_range[0],
                                       '%Y-%m-%d %H:%M:%S.%f' if len(time_range[0].split(' ')) > 1 else '%Y-%m-%d')
     time_end_dt = datetime.strptime(time_range[1],
@@ -472,7 +530,7 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
 
     filter_expr = (
             (pl.col('ITERLVL').is_in(filingSelections)) &
-            (pl.col('cdsub1cb').is_in(selected_subj_code_list)) &
+            (pl.col('cdsub1cb').is_in(selected_subj_list)) &
             (pl.col('sitdtrcv').is_between(time_start_dt, time_end_dt))
     )
 
@@ -552,28 +610,7 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
 
     # Create the mapbox figure with multiple traces
     fig = go.Figure()
-    
-    # # Trace for facility (Reds colorscale)
-    # fig.add_trace(go.scattermap(
-    #     lat=dff_F['lat_adj'],
-    #     lon=dff_F['long_adj'],
-    #     mode='markers',
-    #     marker=go.scattermapbox.Marker(
-    #         size=dff_F['total_closed_cases'],
-    #         color=dff_F['no_remedy_frac'],
-    #         colorscale='Greens',
-    #         cmin=0.9,  # Set min value for color scaling
-    #         cmax=1.0,  # Set max value for color scaling
-    #         showscale=False,  # Show the colorscale for this trace
-    #         # colorbar=dict(title='Greens', x=0.85)  # Position of colorbar
-    #         # sizemax=20,
-    #         sizeref=20/np.max(dff_F['total_closed_cases']),
-            
-    #     ),
-    #     text=dff_F["facility_name"], 
-    #     customdata=[dff_F['pop_total'], dff_F['total_closed_cases'], dff_F['no_remedy_frac'], dff_F['facility_code']],
-    #     name='Facility'
-    # ))
+
     for test_df, test_cscale, locality in zip([dff_F, dff_R, dff_A], ['Reds', 'Greens', 'Blues'], ['Facility', 'Regional Office', 'BOP Headquarters']):
         fig.add_trace(go.Scattermap(
             lat=test_df['lat_adj'],
@@ -595,66 +632,13 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
             customdata=test_df[['pop_total', 'total_closed_cases', 'no_remedy_frac', 'facility_code']],
             hovertemplate=test_df['hover_template'],
         ))
-    # fig.add_trace(go.Scattermap(
-    #     lat=dff_F['lat_adj'],
-    #     lon=dff_F['long_adj'],
-    #     mode='markers',
-    #     marker=go.scattermap.Marker(
-    #         size=dff_F['total_closed_cases'],
-    #         color=dff_F['no_remedy_frac'],
-    #         colorscale='Reds', # Use Reds or another color scale if necessary
-    #         cmin=0.9,
-    #         cmax=1.0,
-    #         sizeref=(2 * np.max(dff_F['total_closed_cases']))/(sizemax**2),
-    #         sizemode='area',
-    #         # sizemin=4,
-    #     ),
-    #     hoverinfo='text',
-    #     hovertext=dff_F['nice_name'],
-    #     customdata=dff_F[['pop_total', 'total_closed_cases', 'no_remedy_frac', 'facility_code']],
-    #     hovertemplate=dff_F['hover_template'],
-    # ))
     
-    # Update layout with Mapbox style and settings
+    # Update layout
     fig.update_layout(
         map_style="basic",
         map_zoom=2.7,
         map_center={"lat": 38, "lon": -95},
         margin={"t":0,"b":0,"r":0,"l":0},
-    )
-
-    
-    # fig = px.scatter_map(summary_df,
-    #                      lat="lat_adj", lon="long_adj", size="total_closed_cases", color="no_remedy_frac", 
-    #                      color_continuous_scale=summary_df['color_scale'],#'Reds', 
-    #                      size_max=20, hover_name="facility_name", zoom=2.7, range_color=[0.9,1.0],
-    #                      hover_data=['pop_total', 'total_closed_cases', 'no_remedy_frac', 'facility_code'],
-    #                     )
-    # fig.update_layout(
-    #     coloraxis={
-    #         'colorbar': {
-    #             'title': 'Rejection / Denial<br>Rate',
-    #             'tickformat':'.0%',
-    #             # 'cmin': 0.9,   # Set minimum value
-    #             # 'cmax': 1.0  # Set maximum value
-    #         }
-    #     },
-    #     margin=dict(l=0, r=0, t=0, b=0)
-    # )
-    # fig.update_layout(coloraxis_showscale=False)
-    # fig.update_traces(
-    #     hovertemplate=summary_df['hover_template'],
-    #     # "<b>%{hovertext}</b><br>" + 
-    #     #               "2024 Population: %{customdata[0]}<br>" +
-    #     #               "Total cases (2000-2007): %{customdata[1]}<br>" +
-    #     #               "Rejection/Denial Rate: %{customdata[2]:.1%}<br>" +
-    #     #               "<extra></extra>", 
-    #     # customdata=name_key_df[['pop_total']],  # Pass customdata for hovertemplate to access
-    #     # custom_data=[summary_df['pop_total'], summary_df['total_closed_cases'], summary_df['no_remedy_frac']],  # Pass customdata for hovertemplate to access
-    #     hovertext=summary_df['nice_name']  # Preserve the facility name in bold
-    # )
-    
-    fig.update_layout(
         hoverlabel=dict(
             bgcolor="white",
             font_size=16,
@@ -668,7 +652,7 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
             x=0.01,
             bgcolor='rgba(0,0,0,0)',
         ),
-        height=300,
+        # height=300,
     )
     
     return fig
@@ -676,7 +660,7 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
 
 @app.callback(
     Output('institution-pie', 'figure'),
-    Output({"type": "metric-value", "index": "cases-ticker"}, "children"),
+    Output({'type': 'metric-value', 'index': 'cases-ticker'}, 'children'),
     inputs = [
         Input('institution-map', 'hoverData'),
         Input('institution-map', 'clickData'),
@@ -697,7 +681,7 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection,selected_s
         raise PreventUpdate()
 
     info = clickData if clickData else hoverData #hoverData if hoverData else clickData
-    selected_subj_code_list = [subj_rows[i]['value'] for i in selected_subj_rows]
+    selected_subj_list = [subj_rows[i]['value'] for i in selected_subj_rows]
 
     time_start_dt = datetime.strptime(time_range[0],
                                       '%Y-%m-%d %H:%M:%S.%f' if len(time_range[0].split(' ')) > 1 else '%Y-%m-%d')
@@ -706,16 +690,13 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection,selected_s
 
     filter_expr = (
             (pl.col('ITERLVL').is_in(filingSelections)) &
-            (pl.col('cdsub1cb').is_in(selected_subj_code_list)) &
+            (pl.col('cdsub1cb').is_in(selected_subj_list)) &
             (pl.col('sitdtrcv').is_between(time_start_dt, time_end_dt))
     )
 
-    if info is None:
-        inst_name = 'All Institutions'
-    else:
+    if info is not None:
         inst_code = info['points'][0]['customdata'][3]
         filter_expr &= (pl.col(trackingSelection) == inst_code)
-        inst_name = name_key_df.filter(pl.col('facility_code') == inst_code)['nice_name'][0]
 
     counts_df = (
         cpt_df
@@ -731,39 +712,33 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection,selected_s
     
     colors = [color_map_pie.get(label, 'gray') for label in labels]
 
-    # fig = px.pie(counts_df, 
-    #              values = counts_df.values,
-    #              names=[status_dict[status] for status in counts_df.index], 
-    #              title='Case Results',
-    #              color=[status_dict[status] for status in counts_df.index],
-    #              color_discrete_map={'Rejected':'#1e374f',
-    #                              'Denied':'#DD6E42',
-    #                              'Closed (Other)':'#9882AC',
-    #                              'Granted':'#FFE8D4'},
-    #              sort=False,
-    #             )
-    fig = go.Figure(data=[go.Pie(labels=labels,
-                                 values=counts_df['values'])])
-    fig.update_traces(hoverinfo='label+percent', 
-                      textinfo='value', 
-                      # text=[val for val in counts_df.values],
-                      textfont_size=18,
-                      pull=[0.3,0,0,0] if 'CLG' in counts_df['CDSTATUS'] else [0,0,0,0],
-                      sort=False, rotation=270,
-                      marker=dict(colors=colors, line=dict(color='#000000', width=1)))
-    fig.update_layout(
-        title=f'Administrative Remedy Outcomes<br>({inst_name})',
-        margin={"t": 0, "b": 0, "l": 0, "r": 0},
-        height=300,
+    fig = go.Figure(
+        data=[
+            go.Pie(
+                labels=labels,
+                values=counts_df['values'],
+                # automargin=False,
+            )
+        ],
     )
-    # fig.update_layout(
-    #     legend=dict(
-    #         yanchor="top",
-    #         y=0.99,
-    #         xanchor="left",
-    #         x=-0.21
-    #     )
-    # )
+    fig.update_traces(
+        # hoverinfo='label+percent',
+        hovertemplate="<b>%{label}</b><br>Cases: %{value:,}</br>%{percent}",
+        name='', #gets rid of secondary box
+        textinfo='label',
+        textposition='inside',
+        # text=[val for val in counts_df.values],
+        # textfont_size=18,
+        pull=[0.3,0,0,0] if 'CLG' in counts_df['CDSTATUS'] else [0,0,0,0],
+        sort=False, rotation=270,
+        marker=dict(colors=colors, line=dict(color='#000000', width=1))
+    )
+    fig.update_layout(
+        title='Administrative Remedy Outcomes',
+        showlegend=False,
+        margin={"t": 30, "b": 0, "l": 0, "r": 0},
+        # height=300,
+    )
                     
     return fig, f'{counts_df["values"].sum():,}'
 
@@ -789,7 +764,7 @@ def update_sunburst(hoverData,clickData,filingSelections,trackingSelection,selec
         raise PreventUpdate()
 
     info = clickData if clickData else hoverData #hoverData if hoverData else clickData
-    selected_subj_code_list = [subj_rows[i]['value'] for i in selected_subj_rows]
+    selected_subj_list = [subj_rows[i]['value'] for i in selected_subj_rows]
 
     time_start_dt = datetime.strptime(time_range[0],
                                       '%Y-%m-%d %H:%M:%S.%f' if len(time_range[0].split(' ')) > 1 else '%Y-%m-%d')
@@ -798,26 +773,60 @@ def update_sunburst(hoverData,clickData,filingSelections,trackingSelection,selec
 
     filter_expr = (
             (pl.col('ITERLVL').is_in(filingSelections)) &
-            (pl.col('cdsub1cb').is_in(selected_subj_code_list)) &
+            (pl.col('cdsub1cb').is_in(selected_subj_list)) &
             (pl.col('sitdtrcv').is_between(time_start_dt, time_end_dt))
     )
 
-    if info is None:
-        inst_name = 'All Institutions'
-    else:
+    if info is not None:
         inst_code = info['points'][0]['customdata'][3]
         filter_expr &= (pl.col(trackingSelection) == inst_code)
-        inst_name = name_key_df.filter(pl.col('facility_code') == inst_code)['nice_name'][0]
 
-    counts_df = (
+    subj_cts_df = (
         cpt_df
         .filter(filter_expr)
-        .group_by('CDSTATUS')
-        .agg(pl.len().alias('values')) #.len().alias('value')
-        .filter(~pl.col('CDSTATUS').eq('ACC'))  # Exclude 'ACC' status if it exists
-        .sort(pl.col('CDSTATUS').cast(pl.Enum(['CLG','CLO','CLD','REJ'])))
+        .group_by('cdsub1cb')
+        .agg(pl.len().alias('values'))
     )
-    counts_df = counts_df.collect()
+    subj_cts_df = subj_cts_df.collect()
+
+    subj_cts_df = subj_cts_df.join(subj_cats_df, left_on='cdsub1cb', right_on='code', coalesce=True)
+
+    gen_cat_cts_df = subj_cts_df.group_by('gen_cat').agg(pl.col('values').sum()).sort(pl.col('gen_cat'))
+
+    labels = gen_cat_cts_df['gen_cat'].to_list() + subj_cts_df['fine_cat'].to_list()
+    parents = [''] * len(gen_cat_cts_df) + subj_cts_df['gen_cat'].to_list()
+    values = gen_cat_cts_df['values'].to_list() + subj_cts_df['values'].to_list()
+
+    color_map_sequence = [color_map_sunburst[cat] for cat in gen_cat_cts_df['gen_cat'].to_list()]
+
+    # Format hover text with text wrapping
+    def format_hover_text(label, value):
+        wrapped_label = '<br>'.join(textwrap.wrap(label, width=30))
+        return f"{wrapped_label}<br><b>Cases: {value:,}</b>"
+
+    hover_texts = [format_hover_text(label, val) for label, val in zip(labels, values)]
+
+    # Create Sunburst Plot
+    fig = go.Figure(go.Sunburst(
+        labels=labels,
+        parents=parents,
+        values=values,
+        branchvalues="total",  # Ensures values sum up properly
+        marker=dict(colors=color_map_sequence),
+        hovertext=hover_texts,
+        hoverinfo='text',
+        insidetextorientation='radial',
+    ))
+
+    # Update Layout
+    fig.update_layout(
+        margin=dict(t=0, l=0, r=0, b=0),
+        # uniformtext=dict(minsize=6, mode='hide'),
+    )
+
+
+    return fig
+
 
 @app.callback(
     Output('case-cts', 'figure'),
@@ -841,22 +850,18 @@ def update_case_counts(hoverData, clickData, filingSelections, trackingSelection
         raise PreventUpdate()
 
     info = clickData if clickData else hoverData  # hoverData if hoverData else clickData
-    selected_subj_code_list = [subj_rows[i]['value'] for i in selected_subj_rows]
+    selected_subj_list = [subj_rows[i]['value'] for i in selected_subj_rows]
 
     # filter_mask = cpt_df['ITERLVL'].isin(filingSelections)
-    # filter_mask &= cpt_df['cdsub1cb'].isin(selected_subj_code_list)
+    # filter_mask &= cpt_df['cdsub1cb'].isin(selected_subj_list)
     filter_expr = (
             (pl.col('ITERLVL').is_in(filingSelections)) &
-            (pl.col('cdsub1cb').is_in(selected_subj_code_list))
+            (pl.col('cdsub1cb').is_in(selected_subj_list))
     )
 
-    if info is None:
-        inst_name = 'All Institutions'
-    else:
+    if info is not None:
         inst_code = info['points'][0]['customdata'][3]
-        # filter_mask &= (cpt_df[trackingSelection] == inst_code)
         filter_expr &= (pl.col(trackingSelection) == inst_code)
-        inst_name = name_key_df.filter(pl.col('facility_code') == inst_code)['nice_name'][0]
 
     case_counts_df = (
         cpt_df
@@ -896,7 +901,7 @@ def update_case_counts(hoverData, clickData, filingSelections, trackingSelection
                              line=dict(color=trp_color, width=2)))
 
     fig.update_layout(
-        title=f"Rolling Monthly Administrative Remedy Filings ({(inst_name)})",
+        title=f"Rolling Monthly Administrative Remedy Filings",
         # xaxis_title="Time",
         # yaxis_title="Weekly Filing Count",
         xaxis = dict(
