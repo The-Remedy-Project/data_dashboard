@@ -462,11 +462,27 @@ def update_subj_filter_by_category(selected_rows, selected_cats):
                     new_selected_rows.append(i)
                     continue
         return new_selected_rows, selected_cats
+    # if changing the fine category
     elif trigger_id == 'datatable-subj-filter':
         if len(selected_rows) == len(subj_opts):
             return selected_rows, subj_cat_opts_list
+        # unselect and select general categories based on if all fine elements of the gen_cat are selected
         else:
-            return selected_rows, []
+            selected_subjs = [subj_opts[subj_ind]['label'] for subj_ind in selected_rows]
+            possible_cats = list(set(subj_cats_df.filter(pl.col('fine_cat').is_in(selected_subjs))['gen_cat']))
+            for possible_cat in possible_cats:
+                subjs_in_cat = list(subj_cats_df.filter(subj_cats_df['gen_cat']==possible_cat)['fine_cat'])
+                print(subjs_in_cat)
+                selected_subj_in_cat_count = 0
+                for selected_subj in selected_subjs:
+                    if selected_subj in subjs_in_cat:
+                        selected_subj_in_cat_count += 1
+                        print(selected_subj_in_cat_count)
+                if selected_subj_in_cat_count != len(subjs_in_cat):
+                    print(f'removing {possible_cat}')
+                    possible_cats.remove(possible_cat)
+                    print(possible_cats)
+            return selected_rows, possible_cats
 
 @app.callback(
     [
