@@ -162,6 +162,16 @@ app.layout = dbc.Container(
     children = [
         dbc.Row([
             dbc.Col([
+                dbc.Row([
+                    dbc.Col(
+                        MetricCard("Selected Institution", id="inst-card"),
+                        width=8,
+                    ),
+                    dbc.Col(
+                        MetricCard("Cases", id="cases-ticker"),
+                        width=4,
+                    ),
+                ], className='mb-2',),
                 dbc.Row(
                     dbc.Col([
                         dbc.Label('Choose filing level:', style={'fontWeight': 'bold'}),
@@ -191,16 +201,130 @@ app.layout = dbc.Container(
                         ),
                     ])
                 ),
-                dbc.Row([
-                    dbc.Col(
-                        MetricCard("Selected Institution", id="inst-card"),
-                        width=8,
-                    ),
-                    dbc.Col(
-                        MetricCard("Cases", id="cases-ticker"),
-                        width=4,
-                    ),
-                ], className='mt-2',),
+                dbc.Row(
+                    dbc.Col([
+                        dbc.Row([
+                            dbc.Col(
+                                dbc.Label('Filter cases by:', style={'fontWeight': 'bold'}),
+                                width="auto"
+                            ),
+                            dbc.Col(
+                                html.Div([
+                                    dbc.Button('SELECT ALL', color='secondary', outline=True, id='all-button-subj',
+                                               className='all-button', size='sm',
+                                               style={'margin-right': '10px', 'font-size': '12px'}),
+                                    dbc.Button('SELECT NONE', color='secondary', outline=True, id='none-button-subj',
+                                               className='none-button', size='sm', style={'font-size': '12px'}),
+                                ], style={'display': 'flex', 'justify-content': 'flex-end'}),  # Ensures buttons align right
+                                width=True
+                            ),
+                        ], justify="between", align="center"),
+                        dbc.Row([
+                            dbc.Col([
+                                dbc.DropdownMenu(
+                                    children=[
+                                        dbc.Checklist(
+                                            id='subj-cat-filter',
+                                            options=subj_cat_opts_list,
+                                            value=subj_cat_opts_list,
+                                            style={
+                                                'font-size':'12px',
+                                                'overflow-y':'scroll',
+                                                'max-height': '300px',
+                                                'width': '100%',
+                                            },
+                                        ),
+                                    ],
+                                    color='secondary',
+                                    direction='down',
+                                    size='sm',
+                                    label="GENERAL CATEGORY",
+                                    style={
+                                        # 'margin-right': '10px',
+                                        # 'width': '100%',
+                                        # 'display': 'block'
+                                    },
+                                    className='d-grid w-100',
+                                ),
+                            ], width=6),
+                            dbc.Col([
+                                dbc.DropdownMenu(
+                                    children=[
+                                        dash_table.DataTable(
+                                            id='datatable-subj-filter',
+                                            columns=[
+                                                {'name': '', 'id': 'label'}
+                                            ],
+                                            data=subj_opts, #table that I defined at start
+                                            fixed_rows={'headers': False},
+                                            filter_action='native',
+                                            row_selectable="multi",
+                                            selected_rows=list(range(len(subj_opts))), # not needed done below instead
+                                            virtualization=False,
+                                            page_action='none',
+                                            style_table={
+                                                'minHeight': '120px',
+                                                'maxHeight': '300px',
+                                                'overflowY': 'auto',
+                                            },
+                                            css=[
+                                                {
+                                                    'selector': '.dash-cell div.dash-cell-value',
+                                                    'rule': 'display: inline; white-space: inherit; overflow: inherit; text-overflow: inherit;',
+                                                },
+                                                {
+                                                    'selector': 'tr:first-child',
+                                                    'rule':'''
+                                                            display: None;
+                                                    '''
+                                                },
+                                            ],
+                                            filter_options={
+                                                'case': 'insensitive',
+                                                'placeholder_text': 'Search for specific case subjects...',
+                                            },
+                                            style_header={
+                                                'backgroundColor': trp_color,
+                                                'color': 'white',
+                                                'fontSize': '14px',
+                                                'fontWeight': 'bold',
+                                                'textAlign': 'center',
+                                            },
+                                            style_cell={
+                                                'whiteSpace': 'no-wrap',
+                                                'overflow': 'hidden',
+                                                'textOverflow': 'ellipsis',
+                                                'minWidth': 0,
+                                                'fontSize': '12px',
+                                                'textAlign': 'left',
+                                            },
+                                            tooltip_data=[
+                                                {
+                                                    column: {'value': str(value), 'type': 'markdown'}
+                                                    for column, value in row.items()
+                                                } for row in subj_opts
+                                            ],
+                                            style_data_conditional=[
+                                                {
+                                                    'if': {'row_index': 'odd'},
+                                                    'backgroundColor': 'rgb(232, 232, 232)'
+                                                }
+                                            ],
+                                            style_as_list_view=True,
+                                        ),
+                                    ],
+                                    color='secondary',
+                                    direction='down',
+                                    size='sm',
+                                    label="SPECIFIC SUBJECT",
+                                    # style={'width':'100%'},
+                                    className='d-grid w-100',
+                                ),
+                            ], width=6),
+                        ]),
+                    ]),
+                    className='mt-2',
+                )
             ], width=5),
             dbc.Col(
                 html.Div(
@@ -219,105 +343,6 @@ app.layout = dbc.Container(
         dbc.Row([dbc.Col(html.Hr(), width=12)]),
 
         dbc.Row([
-            dbc.Col([
-                dbc.Row([
-                    dbc.Col(
-                        dbc.Label('Filter by subject:', style={'fontWeight': 'bold'}),
-                        width="auto"
-                    ),
-                    dbc.Col(
-                        html.Div([
-                            dbc.DropdownMenu(
-                                children=[
-                                    dbc.Checklist(
-                                        id='subj-cat-filter',
-                                        options=subj_cat_opts_list,
-                                        value=subj_cat_opts_list,
-                                        style={'font-size':'12px', 'overflow-y':'scroll', 'max-height': '100px'},
-                                    ),
-                                ],
-                                color='secondary',
-                                direction='down',
-                                size='sm',
-                                label="SELECT BY CATEGORY",
-                                style={'margin-right': '10px'},
-                            ),
-                            dbc.Button('SELECT ALL', color='secondary', outline=True, id='all-button-subj',
-                                       className='all-button', size='sm',
-                                       style={'margin-right': '10px', 'font-size': '12px'}),
-                            dbc.Button('SELECT NONE', color='secondary', outline=True, id='none-button-subj',
-                                       className='none-button', size='sm', style={'font-size': '12px'}),
-                        ], style={'display': 'flex', 'justify-content': 'flex-end'}),  # Ensures buttons align right
-                        width=True
-                    ),
-                ], justify="between", align="center"),
-                dbc.Row([
-                    dbc.Col([
-                        dash_table.DataTable(
-                            id='datatable-subj-filter',
-                            columns=[
-                                {'name': '', 'id': 'label'}
-                            ],
-                            data=subj_opts, #table that I defined at start
-                            fixed_rows={'headers': False},
-                            filter_action='native',
-                            row_selectable="multi",
-                            selected_rows=list(range(len(subj_opts))), # not needed done below instead
-                            virtualization=False,
-                            page_action='none',
-                            style_table={
-                                'minHeight': '120px',
-                                'maxHeight': '200px',
-                                'overflowY': 'auto',
-                            },
-                            css=[
-                                {
-                                    'selector': '.dash-cell div.dash-cell-value',
-                                    'rule': 'display: inline; white-space: inherit; overflow: inherit; text-overflow: inherit;',
-                                },
-                                {
-                                    'selector': 'tr:first-child',
-                                    'rule':'''
-                                            display: None;
-                                    '''
-                                },
-                            ],
-                            filter_options={
-                                'case': 'insensitive',
-                                'placeholder_text': 'Search for specific case subjects...',
-                            },
-                            style_header={
-                                'backgroundColor': trp_color,
-                                'color': 'white',
-                                'fontSize': '14px',
-                                'fontWeight': 'bold',
-                                'textAlign': 'center',
-                            },
-                            style_cell={
-                                'whiteSpace': 'no-wrap',
-                                'overflow': 'hidden',
-                                'textOverflow': 'ellipsis',
-                                'maxWidth': 0,
-                                'fontSize': '12px',
-                                'textAlign': 'left',
-                            },
-                            tooltip_data=[
-                                {
-                                    column: {'value': str(value), 'type': 'markdown'}
-                                    for column, value in row.items()
-                                } for row in subj_opts
-                            ],
-                            style_data_conditional=[
-                                {
-                                    'if': {'row_index': 'odd'},
-                                    'backgroundColor': 'rgb(232, 232, 232)'
-                                }
-                            ],
-                            style_as_list_view=True,
-                        ),
-                    ]),
-                ]),
-            ], width=4),
             dbc.Col(
                 dcc.Graph(
                     id='institution-sunburst',
