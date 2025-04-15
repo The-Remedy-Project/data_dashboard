@@ -326,6 +326,24 @@ app.layout = dbc.Container(
                     className='mt-2',
                 )
             ], width=5),
+
+            dbc.Col(
+                dcc.Graph(
+                    id='case-cts',
+                    figure={
+                        'layout': go.Layout(
+                            margin=dict(l=0, r=0, t=0, b=0),  # Tight margins
+                        )
+                    }
+                ),
+                width=7,
+            )
+
+        ], className='mt-1'),
+
+        dbc.Row([dbc.Col(html.Hr(), width=12)]),
+
+        dbc.Row([
             dbc.Col(
                 html.Div(
                     dcc.Graph(
@@ -336,18 +354,7 @@ app.layout = dbc.Container(
                     id='graph-container',
                     style={'height': '100%', 'display': 'flex'},
                 ),
-                width=7
-            ),
-        ], className='mt-1'),
-
-        dbc.Row([dbc.Col(html.Hr(), width=12)]),
-
-        dbc.Row([
-            dbc.Col(
-                dcc.Graph(
-                    id='institution-sunburst',
-                ),
-                width=4,
+                width=4
             ),
             dbc.Col(
                 dcc.Graph(
@@ -355,22 +362,15 @@ app.layout = dbc.Container(
                     figure={'layout': go.Layout(margin=dict(l=10, r=10, t=10, b=10))}
                 ),
                 width=4
-            )
-        ], className='my-auto'),
-
-        dbc.Row([
+            ),
             dbc.Col(
                 dcc.Graph(
-                    id='case-cts',
-                    figure={
-                        'layout': go.Layout(
-                            margin=dict(l=0, r=0, t=0, b=0),  # Tight margins
-                        )
-                    }
+                    id='institution-sunburst',
                 ),
-                width=12,
-            )
-        ]),
+                width=4,
+            ),
+        ], className='my-auto'),
+
         html.Div(
             dbc.Button(
                 html.I(className="bi bi-info-circle"),
@@ -678,8 +678,8 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
     # Update layout
     fig.update_layout(
         map_style="basic",
-        map_zoom=2.7,
-        map_center={"lat": 38, "lon": -95},
+        map_zoom=2.6,
+        map_center={"lat": 38, "lon": -97},
         margin={"t":0,"b":0,"r":0,"l":0},
         hoverlabel=dict(
             bgcolor="white",
@@ -769,7 +769,7 @@ def update_pie(hoverData,clickData,filingSelections,trackingSelection,selected_s
         textposition='inside',
         # text=[val for val in counts_df.values],
         # textfont_size=18,
-        pull=[0.3,0,0,0] if 'CLG' in counts_df['CDSTATUS'] else [0,0,0,0],
+        pull=[0.0,0,0,0] if 'CLG' in counts_df['CDSTATUS'] else [0,0,0,0],
         sort=False, rotation=270,
         marker=dict(colors=colors, line=dict(color='#000000', width=1))
     )
@@ -855,10 +855,10 @@ def update_sunburst(hoverData,clickData,filingSelections,trackingSelection,selec
         hoverinfo='text',
         insidetextorientation='radial',
     ))
-
     # Update Layout
     fig.update_layout(
-        margin=dict(t=0, l=0, r=0, b=0),
+        title='Administrative Remedy Subjects',
+        margin=dict(t=30, l=0, r=0, b=0),
         # uniformtext=dict(minsize=6, mode='hide'),
     )
 
