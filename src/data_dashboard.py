@@ -694,6 +694,7 @@ def update_map(filingSelections, trackingSelection, selected_subj_rows, time_ran
             x=0.01,
             bgcolor='rgba(0,0,0,0)',
         ),
+        modebar_remove=['select2d', 'lasso2d'],
         # height=300,
     )
     
